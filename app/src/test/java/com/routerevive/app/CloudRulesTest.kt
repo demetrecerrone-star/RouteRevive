@@ -30,6 +30,10 @@ class CloudRulesTest {
     @Test fun cloudPathsCannotTraverseOrAccessOtherFiles() {
         assertEquals(id + "/" + name, CloudRules.path(id, name))
         assertTrue(CloudRules.validName(CloudRules.newName()))
+        assertTrue(CloudRules.validName(CloudRules.newName(automatic = true)))
+        assertFalse(CloudRules.isAutomaticName(name))
+        assertTrue(CloudRules.isAutomaticName(CloudRules.newName(automatic = true)))
+        assertFalse(CloudRules.isAutomaticName(CloudRules.newName()))
         assertThrows(IllegalArgumentException::class.java) {
             CloudRules.path(id, "../backup-other.rrb")
         }
