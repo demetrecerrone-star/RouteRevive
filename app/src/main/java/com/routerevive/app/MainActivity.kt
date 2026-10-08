@@ -290,11 +290,11 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
         ).isEmpty() && !LocalDate.parse(campaign.expiryDate).isBefore(LocalDate.now())
 
     val current = campaigns.firstOrNull { it.id == selectedId }
-    BackHandler(page !in setOf("home", "customers", "campaigns", "schedule", "map", "jobs", "business", "requests")) {
+    BackHandler(page !in setOf("home", "customers", "schedule", "jobs", "more")) {
         page = when (page) {
             "campaign_detail", "new_campaign" -> "campaigns"
-            "business", "requests" -> "home"
-            else -> "customers"
+            "new_customer", "edit_customer" -> "customers"
+            else -> "more"
         }
     }
 
@@ -302,11 +302,13 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
         NavigationBar(containerColor = Panel) {
             listOf(Triple("home", "Overview", Icons.Default.Home),
                 Triple("customers", "Customers", Icons.Default.People),
+                Triple("schedule", "Schedule", Icons.Default.DateRange),
                 Triple("jobs", "Jobs", Icons.Default.Build),
-                Triple("map", "Map", Icons.Default.Map),
-                Triple("campaigns", "Campaigns", Icons.Default.LocationOn)).forEach { (id, title, icon) ->
+                Triple("more", "More", Icons.Default.MoreHoriz)).forEach { (id, title, icon) ->
                 NavigationBarItem(
-                    selected = page == id || (page == "campaign_detail" && id == "campaigns"),
+                    selected = page == id || (id == "more" &&
+                        page in setOf("map", "campaigns", "campaign_detail",
+                            "new_campaign", "requests", "business", "booking_page")),
                     onClick = { page = id },
                     icon = { Icon(icon, contentDescription = title) }, label = { Text(title, fontSize = 11.sp) }
                 )
@@ -328,6 +330,8 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         "jobs" -> "Jobs & invoices"
                         "business" -> "Business essentials"
                         "requests" -> "Booking requests"
+                        "more" -> "More tools"
+                        "booking_page" -> "Customer booking page"
                         "map" -> "Neighborhood map"
                         "campaigns" -> "Neighborhood campaigns"
                         "new_campaign" -> "New campaign"
@@ -342,8 +346,8 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                 } else if (page !in listOf("home")) {
                     IconButton(onClick = { page = when (page) {
                         "campaign_detail", "new_campaign" -> "campaigns"
-                        "business", "requests" -> "home"
-                        else -> "customers"
+                        "new_customer", "edit_customer" -> "customers"
+                        else -> "more"
                     } }) {
                         Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
                     }
@@ -366,6 +370,15 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                     onImport = { backupAction = "import"; backupPassword = "" },
                     onLegacyImport = { importLauncher.launch(arrayOf("application/json", "text/plain")) },
                     backupBusy = backupBusy, backupMessage = lastBackupMessage)
+                "more" -> MoreScreen(
+                    business = business,
+                    onMap = { page = "map" },
+                    onRequests = { page = "requests" },
+                    onCampaigns = { page = "campaigns" },
+                    onBusiness = { page = "business" },
+                    onBookingPage = { page = "booking_page" })
+                "booking_page" -> BookingPageScreen(
+                    profile = business, onBack = { page = "more" })
                 "requests" -> RequestsScreen(
                     requests = bookingRequests.toList(),
                     appointments = appointments.toList(),
