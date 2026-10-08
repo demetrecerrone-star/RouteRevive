@@ -300,7 +300,11 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         Icon(Icons.Default.AddCircle, "Add", tint = Highlight)
                     }
                 } else if (page !in listOf("home")) {
-                    IconButton(onClick = { page = if (page == "campaign_detail" || page == "new_campaign") "campaigns" else "customers" }) {
+                    IconButton(onClick = { page = when (page) {
+                        "campaign_detail", "new_campaign" -> "campaigns"
+                        "business" -> "home"
+                        else -> "customers"
+                    } }) {
                         Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
                     }
                 }
