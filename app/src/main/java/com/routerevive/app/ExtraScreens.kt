@@ -30,17 +30,20 @@ object ScheduleRules {
     fun validTime(time: String): Boolean =
         runCatching { LocalTime.parse(time) }.isSuccess
     fun overlaps(candidate: Appointment, all: List<Appointment>): Boolean {
-        val start = runCatching { LocalTime.parse(candidate.time) }.getOrNull() ?: return true
+        val start = runCatching { java.time.LocalDateTime.of(
+            LocalDate.parse(candidate.date), LocalTime.parse(candidate.time)) }.getOrNull() ?: return true
+        if (candidate.durationMinutes !in 15..480) return true
         val end = start.plusMinutes(candidate.durationMinutes.toLong())
+        // Service sessions crossing midnight need a deliberate multi-day scheduler.
+        if (end.toLocalDate() != start.toLocalDate()) return true
         return all.any { other ->
-            if (other.id == candidate.id || other.status == "CANCELLED" || other.date != candidate.date) {
-                false
-            } else {
-                val existingStart = runCatching { LocalTime.parse(other.time) }.getOrNull()
-                if (existingStart == null) true else {
-                    val existingEnd = existingStart.plusMinutes(other.durationMinutes.toLong())
-                    start.isBefore(existingEnd) && existingStart.isBefore(end)
-                }
+            if (other.id == candidate.id || other.status == "CANCELLED") false
+            else {
+                val beginning = runCatching { java.time.LocalDateTime.of(
+                    LocalDate.parse(other.date), LocalTime.parse(other.time)) }.getOrNull()
+                if (beginning == null || other.durationMinutes <= 0) true
+                else start.isBefore(beginning.plusMinutes(other.durationMinutes.toLong())) &&
+                    beginning.isBefore(end)
             }
         }
     }
