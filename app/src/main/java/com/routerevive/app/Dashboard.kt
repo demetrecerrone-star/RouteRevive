@@ -133,7 +133,7 @@ fun DashboardScreen(
                     color = MaterialTheme.colorScheme.primary)
             }
         }
-        Text("v0.2.2 · Local-first · SMS reminders require manual sending",
+        Text("v0.2.3 · Local-first · SMS reminders require manual sending",
             color = MaterialTheme.colorScheme.secondary, fontSize = 11.sp)
         Spacer(Modifier.height(8.dp))
     }
