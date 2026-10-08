@@ -1,3 +1,15 @@
+# RouteRevive v0.2.4 — Cloud backup management and overview polish
+
+What's new: **More → Private cloud backups** now shows the type and size of listed archives, protects the most recent backup and automatic sync head, and allows explicit confirmed deletion of older cloud files. A **new Supabase DELETE Row Level Security policy** must be added by existing cloud users; see [Supabase setup instructions](docs/SUPABASE_SETUP.md). Cloud objects remain private and access-controlled. Deletion is irreversible and may affect other devices.
+
+**Optional retention is disabled by default.** Enable automatic backups and choose Keep all / newest 10 / 30 / 60 automatic archives. Cleanup only targets older automatic snapshots after successful cloud sync (or when separately confirmed); manual uploads are not auto-deleted, and this phone's baseline is protected. Keep your own offline recovery archive before allowing cleanup.
+
+The **Overview** now shows a business pulse (today's appointments and overdue invoice balance), shortcuts to Analytics/Cloud, and an on-device cloud health indicator. The app records successful no-change cloud checks for a more accurate health timestamp, without claiming live or multi-device merge sync.
+
+**Install the v0.2.4 (versionCode 15) signed APK directly over v0.2.3. Do not uninstall or clear local app data.** Export an encrypted full backup before upgrading. The encrypted RRB7 archive format and existing photo/customer/job records remain compatible.
+
+---
+
 # RouteRevive v0.2.3 — Customer history, recurring bookings, calendar and job progress
 
 New in v0.2.3: **Customers → History** displays dated service records, appointments, manual reminder records, job status changes, photos and received job payments for that customer. It is a timeline derived from the saved record snapshot, **not** a complete audit log of every edit.
