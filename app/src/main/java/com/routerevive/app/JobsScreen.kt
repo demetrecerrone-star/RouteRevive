@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -38,6 +39,7 @@ fun JobsScreen(
     onOpenSchedule: () -> Unit
 ) {
     var selectedId by remember { mutableStateOf<String?>(null) }
+    var statusFilter by remember { mutableStateOf("All") }
     val appointment = appointments.firstOrNull { it.id == selectedId }
     if (appointment != null) {
         val customer = customers.firstOrNull { it.id == appointment.customerId }
@@ -52,8 +54,16 @@ fun JobsScreen(
     Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("JOBS & INVOICING", color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.Bold, fontSize = 13.sp)
-        Text("Service details, photos, estimates, invoices and payments",
+        Text("Track job progress, service details, photos, invoices and payments",
             color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp)
+        Row(Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("All", "Active", "On hold", "Completed").forEach { choice ->
+                FilterChip(selected = statusFilter == choice,
+                    onClick = { statusFilter = choice },
+                    label = { Text(choice, fontSize = 11.sp) })
+            }
+        }
         OutlinedButton(onClick = onOpenSchedule, modifier = Modifier.fillMaxWidth()) {
             Text("Manage / add appointments")
         }
@@ -62,8 +72,17 @@ fun JobsScreen(
                 modifier = Modifier.padding(14.dp))
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(appointments.sortedWith(compareByDescending<Appointment> { it.date }.thenBy { it.time }),
-                key = { it.id }) { a ->
+            val visible = appointments.filter { a ->
+                val stage = jobs.firstOrNull { it.appointmentId == a.id }?.status ?: "PLANNED"
+                when (statusFilter) {
+                    "Active" -> stage in setOf("PLANNED", "IN_PROGRESS") &&
+                        a.status != "CANCELLED"
+                    "On hold" -> stage == "ON_HOLD"
+                    "Completed" -> stage == "COMPLETED"
+                    else -> true
+                }
+            }.sortedWith(compareByDescending<Appointment> { it.date }.thenBy { it.time })
+            items(visible, key = { it.id }) { a ->
                 val customer = customers.firstOrNull { it.id == a.customerId }
                 val job = jobs.firstOrNull { it.appointmentId == a.id } ?: JobMath.defaultFrom(a)
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
@@ -73,6 +92,8 @@ fun JobsScreen(
                         Text(a.date + "  ·  " + a.time + "  ·  " + a.status.replace('_', ' '),
                             color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp)
                         Text(a.service, fontSize = 13.sp)
+                        Text("Job progress: " + JobProgress.label(job.status),
+                            color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
                         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                             Text("Total " + money(JobMath.subtotal(job)), color = MaterialTheme.colorScheme.primary)
                             Text("Due " + money(JobMath.balance(job)), fontSize = 13.sp)
@@ -150,7 +171,27 @@ private fun JobDetailScreen(
         Text(customer.name, fontWeight = FontWeight.Bold, fontSize = 22.sp)
         Text(appointment.service + " · " + appointment.date + " at " + appointment.time,
             color = MaterialTheme.colorScheme.secondary)
-        Text("Status: " + appointment.status.replace('_', ' '), fontSize = 12.sp)
+        Text("Appointment: " + appointment.status.replace('_', ' '), fontSize = 12.sp)
+        HorizontalDivider()
+        Text("JOB PROGRESS", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text("Update progress independently of invoice/payment status.",
+            color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp)
+        listOf(
+            listOf("PLANNED", "IN_PROGRESS"),
+            listOf("ON_HOLD", "COMPLETED")
+        ).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { stage ->
+                    FilterChip(selected = job.status == stage,
+                        onClick = { onSaveJob(JobProgress.update(job, stage)) },
+                        label = { Text(JobProgress.label(stage)) })
+                }
+            }
+        }
+        if (job.statusUpdatedAt.isNotBlank()) {
+            Text("Progress updated: " + job.statusUpdatedAt,
+                fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
+        }
         HorizontalDivider()
         Text("JOB DETAILS", fontSize = 13.sp, fontWeight = FontWeight.Bold)
         OutlinedTextField(value = company, onValueChange = { company = it },

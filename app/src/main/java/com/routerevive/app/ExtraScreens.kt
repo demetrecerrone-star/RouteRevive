@@ -141,6 +141,7 @@ fun ScheduleScreen(
     customers: List<Customer>,
     appointments: List<Appointment>,
     onNew: (Appointment) -> Unit,
+    onRepeat: (List<Appointment>) -> Unit,
     onStatus: (Appointment, String) -> Unit,
     onReschedule: (Appointment) -> Unit,
     onRemind: (Appointment) -> Unit,
@@ -148,6 +149,10 @@ fun ScheduleScreen(
 ) {
     var showNew by remember { mutableStateOf(false) }
     var filter by remember { mutableStateOf("Upcoming") }
+    var focusDate by remember { mutableStateOf(LocalDate.now()) }
+    var repeatSource by remember { mutableStateOf<Appointment?>(null) }
+    var repeatCadence by remember { mutableStateOf(RepeatCadence.WEEKLY) }
+    var repeatCount by remember { mutableStateOf("4") }
     var statusChange by remember { mutableStateOf<Pair<Appointment, String>?>(null) }
     var rescheduling by remember { mutableStateOf<Appointment?>(null) }
     var newDate by remember { mutableStateOf("") }
@@ -175,7 +180,8 @@ fun ScheduleScreen(
     val currentDate = LocalDate.now()
     val visible = appointments.filter { a ->
         when (filter) {
-            "Today" -> a.date == currentDate.toString()
+            "Day", "Week" -> RecurringBookingRules.view(appointments, focusDate, filter)
+                .any { it.id == a.id }
             "Upcoming" -> a.status in setOf("SCHEDULED", "IN_PROGRESS") &&
                 runCatching { !LocalDate.parse(a.date).isBefore(currentDate) }.getOrDefault(false)
             else -> true
@@ -188,9 +194,48 @@ fun ScheduleScreen(
             Button(onClick = { showNew = true }) { Icon(Icons.Default.Add, null); Text(" New") }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            listOf("Today", "Upcoming", "All").forEach { option ->
-                FilterChip(selected = filter == option, onClick = { filter = option },
-                    label = { Text(option, fontSize = 12.sp) })
+            listOf("Day", "Week", "Upcoming", "All").forEach { option ->
+                FilterChip(selected = filter == option,
+                    onClick = {
+                        filter = option
+                        if (option == "Day" || option == "Week") focusDate = LocalDate.now()
+                    }, label = { Text(option, fontSize = 12.sp) })
+            }
+        }
+        if (filter == "Day" || filter == "Week") {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { focusDate = focusDate.minusDays(if (filter == "Week") 7 else 1) }) {
+                    Text("‹ Previous")
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(if (filter == "Week") "Week of " +
+                        focusDate.minusDays((focusDate.dayOfWeek.value - 1).toLong())
+                        else focusDate.toString(), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    TextButton(onClick = { focusDate = LocalDate.now() }) { Text("Today") }
+                }
+                TextButton(onClick = { focusDate = focusDate.plusDays(if (filter == "Week") 7 else 1) }) {
+                    Text("Next ›")
+                }
+            }
+            val monday = focusDate.minusDays((focusDate.dayOfWeek.value - 1).toLong())
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                (0L..6L).forEach { offset ->
+                    val day = monday.plusDays(offset)
+                    val count = appointments.count { it.date == day.toString() && it.status != "CANCELLED" }
+                    Surface(onClick = { focusDate = day; filter = "Day" },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(9.dp),
+                        color = MaterialTheme.colorScheme.surface) {
+                        Column(Modifier.padding(vertical = 7.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(day.dayOfWeek.name.take(1), fontSize = 10.sp)
+                            Text(day.dayOfMonth.toString(), fontSize = 12.sp)
+                            if (count > 0) Text(count.toString(),
+                                fontSize = 10.sp, color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
             }
         }
         Text("${visible.size} shown · ${appointments.size} total",
@@ -235,6 +280,13 @@ fun ScheduleScreen(
                                     color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                             }
                         }
+                        if (a.status in setOf("SCHEDULED", "IN_PROGRESS", "COMPLETED")) {
+                            OutlinedButton(onClick = {
+                                repeatSource = a
+                                repeatCadence = RepeatCadence.WEEKLY
+                                repeatCount = "4"
+                            }) { Text("Repeat booking") }
+                        }
                         if (a.status in setOf("SCHEDULED", "IN_PROGRESS")) {
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 if (a.status == "SCHEDULED") {
@@ -256,6 +308,47 @@ fun ScheduleScreen(
                 }
             }
         }
+    }
+    repeatSource?.let { seed ->
+        val count = repeatCount.toIntOrNull() ?: 0
+        val proposed = runCatching {
+            RecurringBookingRules.create(seed, repeatCadence, count, appointments)
+        }
+        AlertDialog(onDismissRequest = { repeatSource = null },
+            title = { Text("Repeat this appointment") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Create individual future bookings for " + seed.service +
+                        " at " + seed.time + ". Each can be edited or cancelled separately.",
+                        fontSize = 12.sp)
+                    RepeatCadence.entries.forEach { cadence ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = repeatCadence == cadence,
+                                onClick = { repeatCadence = cadence })
+                            Text(cadence.display)
+                        }
+                    }
+                    ExtraField("Number of future bookings (1–12)", repeatCount,
+                        KeyboardType.Number) { repeatCount = it.take(2) }
+                    proposed.onSuccess { dates ->
+                        Text("Dates: " + dates.joinToString(", ") { it.date },
+                            color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+                    }.onFailure { error ->
+                        Text(error.message ?: "Check the repeat settings",
+                            color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    }
+                    Text("Nothing will be booked until you confirm. Conflicting time " +
+                        "slots stop the entire series.", fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.secondary)
+                }
+            }, confirmButton = {
+                TextButton(enabled = proposed.isSuccess, onClick = {
+                    proposed.getOrNull()?.let(onRepeat)
+                    repeatSource = null
+                }) { Text("Create bookings") }
+            }, dismissButton = {
+                TextButton(onClick = { repeatSource = null }) { Text("Cancel") }
+            })
     }
     statusChange?.let { (appointment, status) ->
         AlertDialog(onDismissRequest = { statusChange = null },

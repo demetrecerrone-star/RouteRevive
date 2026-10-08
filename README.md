@@ -1,3 +1,15 @@
+# RouteRevive v0.2.3 — Customer history, recurring bookings, calendar and job progress
+
+New in v0.2.3: **Customers → History** displays dated service records, appointments, manual reminder records, job status changes, photos and received job payments for that customer. It is a timeline derived from the saved record snapshot, **not** a complete audit log of every edit.
+
+**Schedule → Day / Week** has date navigation and a 7-day calendar strip with daily appointment counts. The existing Upcoming and All views remain. **Repeat booking** creates 1–12 independent weekly, every-two-weeks, or monthly appointments. The entire group is checked for overlaps before any booking is saved; on conflict no part of the new series is created. A monthly series uses the original day-of-month anchor, so the dates will not drift after February. Generated bookings remain editable or cancellable individually and are not background-generated forever.
+
+**Jobs → Job progress** can mark work Planned, In progress, On hold or Completed, with a saved last-change date. The appointment status and billing records stay independent. Job filters make it easier to find active, held, or finished work.
+
+This release uses the existing version-7 encrypted record/backup format, with optional new job-status fields that default safely when reading earlier data. **Install signed v0.2.3 (versionCode 14) over the current release—do not uninstall or clear app data.** Create an encrypted backup first.
+
+---
+
 # RouteRevive v0.2.2 — Business analytics and private reminders
 
 New in v0.2.2: **More → Business analytics** shows a 6/12-month chart of actual job payment receipts, total recorded collections, issued invoice balances, overdue invoices, customers with multiple recorded bookings, and completed appointments. This information is computed from the local records on your phone; it is not sent to an analytics service.

@@ -212,6 +212,9 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
     fun updateJob(job: JobRecord) {
         val appointment = appointments.firstOrNull { it.id == job.appointmentId }
         if (appointment == null || appointment.customerId != job.customerId ||
+            !JobProgress.valid(job.status) ||
+            job.statusUpdatedAt.isNotBlank() &&
+                runCatching { LocalDate.parse(job.statusUpdatedAt) }.isFailure ||
             job.lineItems.size > 20 || job.lineItems.any { !JobMath.validLineItem(it) } ||
             job.photos.size > 16 || job.payments.any { it.amount <= 0 || !it.amount.isFinite() } ||
             JobMath.paid(job) > JobMath.subtotal(job) + 0.001) {
@@ -299,7 +302,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
     BackHandler(page !in setOf("home", "customers", "schedule", "jobs", "more")) {
         page = when (page) {
             "campaign_detail", "new_campaign" -> "campaigns"
-            "new_customer", "edit_customer" -> "customers"
+            "new_customer", "edit_customer", "customer_history" -> "customers"
             else -> "more"
         }
     }
@@ -333,6 +336,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         "customers" -> "Customer records"
                         "new_customer" -> "Add customer"
                         "edit_customer" -> "Edit customer"
+                        "customer_history" -> "Customer history"
                         "schedule" -> "Appointments"
                         "jobs" -> "Jobs & invoices"
                         "business" -> "Business essentials"
@@ -358,7 +362,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                 } else if (page !in listOf("home")) {
                     IconButton(onClick = { page = when (page) {
                         "campaign_detail", "new_campaign" -> "campaigns"
-                        "new_customer", "edit_customer" -> "customers"
+                        "new_customer", "edit_customer", "customer_history" -> "customers"
                         else -> "more"
                     } }) {
                         Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
@@ -439,9 +443,16 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                 "customers" -> CustomerScreen(customers.toList(),
                     onAdd = { page = "new_customer" },
                     onEdit = { editingCustomerId = it; page = "edit_customer" },
+                    onHistory = { editingCustomerId = it; page = "customer_history" },
                     onOptOut = { id -> customers.firstOrNull { it.id == id }?.let { updateCustomer(it.copy(optedOut = true)) } },
                     onIssue = { id -> customers.firstOrNull { it.id == id }?.let { updateCustomer(it.copy(issueOpen = !it.issueOpen)) } },
                     onBooking = { id -> customers.firstOrNull { it.id == id }?.let { updateCustomer(it.copy(futureBooked = !it.futureBooked)) } })
+                "customer_history" ->
+                    customers.firstOrNull { it.id == editingCustomerId }?.let { customer ->
+                        CustomerHistoryScreen(customer, appointments.toList(), jobs.toList(),
+                            onEdit = { page = "edit_customer" },
+                            onSchedule = { page = "schedule" })
+                    }
                 "new_customer" -> NewCustomerScreen(onSave = {
                     customers.add(it); save(); page = "customers"
                 })
@@ -483,7 +494,30 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         if (!ScheduleRules.overlaps(appointment, appointments.toList())) {
                             appointments.add(appointment); save()
                         } else appError = "Time slot overlaps another booking."
-                    }, onStatus = { a, status -> updateAppointmentStatus(a, status) },
+                    },
+                    onRepeat = { series ->
+                        val known = appointments.toList()
+                        val staged = mutableListOf<Appointment>()
+                        val valid = series.isNotEmpty() && series.size <= 12 &&
+                            series.all { a ->
+                                val allowed = customers.any { it.id == a.customerId } &&
+                                    a.status == "SCHEDULED" &&
+                                    ScheduleRules.validDate(a.date) &&
+                                    !LocalDate.parse(a.date).isBefore(LocalDate.now()) &&
+                                    ScheduleRules.validTime(a.time) &&
+                                    a.durationMinutes in 15..480 &&
+                                    known.none { it.id == a.id } &&
+                                    staged.none { it.id == a.id } &&
+                                    !ScheduleRules.overlaps(a, known + staged)
+                                if (allowed) staged.add(a)
+                                allowed
+                            }
+                        if (valid) {
+                            appointments.addAll(staged)
+                            save()
+                        } else appError = "Recurring bookings could not be saved: review dates and overlaps."
+                    },
+                    onStatus = { a, status -> updateAppointmentStatus(a, status) },
                     onReschedule = { revised -> rescheduleAppointment(revised) },
                     onRemind = { appointment ->
                         val currentAppointment = appointments.firstOrNull { it.id == appointment.id }
@@ -793,7 +827,7 @@ private fun HomeScreen(customers: List<Customer>, campaigns: List<Campaign>,
 
 @Composable
 private fun CustomerScreen(customers: List<Customer>, onAdd: () -> Unit,
-                           onEdit: (String) -> Unit,
+                           onEdit: (String) -> Unit, onHistory: (String) -> Unit,
                            onOptOut: (String) -> Unit, onIssue: (String) -> Unit,
                            onBooking: (String) -> Unit) {
     var query by remember { mutableStateOf("") }
@@ -835,9 +869,14 @@ private fun CustomerScreen(customers: List<Customer>, onAdd: () -> Unit,
                     fontSize = 12.sp)
                 if (c.address.isNotBlank()) Text(c.address, fontSize = 12.sp)
                 if (c.notes.isNotBlank()) Text(c.notes, fontSize = 12.sp, maxLines = 2)
-                OutlinedButton(onClick = { onEdit(c.id) }) {
-                    Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp))
-                    Text(" Edit profile")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { onHistory(c.id) }) {
+                        Text("History")
+                    }
+                    OutlinedButton(onClick = { onEdit(c.id) }) {
+                        Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp))
+                        Text(" Edit profile")
+                    }
                 }
                 if (c.optedOut) Text("OPTED OUT — promotional contact blocked", color = Color(0xFFFF9D9D), fontSize = 12.sp)
                 if (c.issueOpen) Text("Unresolved issue — campaign blocked", color = Color(0xFFFBBF24), fontSize = 12.sp)

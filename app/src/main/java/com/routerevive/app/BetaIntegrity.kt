@@ -57,6 +57,10 @@ object BetaIntegrity {
         val active = appointments.filter { it.status in setOf("SCHEDULED", "IN_PROGRESS") }
         if (active.any { ap -> ScheduleRules.overlaps(ap, active) })
             errors += "Active appointments have overlapping time slots"
+        if (jobs.any { !JobProgress.valid(it.status) ||
+                (it.statusUpdatedAt.isNotBlank() && !ScheduleRules.validDate(it.statusUpdatedAt)) }) {
+            errors += "Job progress status or date needs review"
+        }
         if (jobs.any { j ->
                 j.lineItems.any { !JobMath.validLineItem(it) } ||
                     j.payments.any { it.amount <= 0 || !it.amount.isFinite() } ||
@@ -126,6 +130,13 @@ object BackupValidator {
             "requestedDate", "requestedTime"), requests)
         for (i in 0 until jobs.length()) {
             val job = jobs.getJSONObject(i)
+            require(JobProgress.valid(job.optString("status", "PLANNED"))) {
+                "Invalid job progress status"
+            }
+            require(job.optString("statusUpdatedAt").isBlank() ||
+                ScheduleRules.validDate(job.optString("statusUpdatedAt"))) {
+                "Invalid job progress date"
+            }
             job.optJSONArray("lineItems")?.let { list ->
                 for (n in 0 until list.length()) {
                     val item = list.getJSONObject(n)

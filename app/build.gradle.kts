@@ -12,8 +12,8 @@ android {
         applicationId = "com.routerevive.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 13
-        versionName = "0.2.2"
+        versionCode = 14
+        versionName = "0.2.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     val signedStorePath = System.getenv("RR_SIGNING_FILE")
