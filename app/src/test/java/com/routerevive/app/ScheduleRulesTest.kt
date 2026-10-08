@@ -25,6 +25,19 @@ class ScheduleRulesTest {
         assertFalse(ScheduleRules.overlaps(ap("09:00"), listOf(ap("09:00", status = "CANCELLED"))))
     }
 
+    @Test fun jobsCannotRunPastMidnightOrOverlapPreviousDay() {
+        assertTrue(ScheduleRules.overlaps(
+            ap("23:45", minutes = 60), emptyList()))
+        assertTrue(ScheduleRules.overlaps(
+            ap("00:15", "2026-10-13"), listOf(ap("23:40", minutes = 60))))
+    }
+
+    @Test fun existingCanceledMidnightJobsDoNotBlockFutureSlots() {
+        assertFalse(ScheduleRules.overlaps(
+            ap("00:15", "2026-10-13"),
+            listOf(ap("23:40", status = "CANCELLED", minutes = 60))))
+    }
+
     @Test fun dateAndTimeValidation() {
         assertTrue(ScheduleRules.validDate("2026-10-12"))
         assertFalse(ScheduleRules.validDate("2026-13-12"))
