@@ -110,8 +110,10 @@ object CloudSyncEngine {
                 val local = fingerprint(store)
                 val choice = CloudSyncRules.decide(remote, local, vault.syncBaseline())
                 when (choice) {
-                    CloudSyncChoice.CURRENT -> retentionResult(
-                        cloud, signed, vault, choice, "Device is up to date.", remote)
+                    CloudSyncChoice.CURRENT -> {
+                        vault.recordChecked()
+                        retentionResult(cloud, signed, vault, choice, "Device is up to date.", remote)
+                    }
                     CloudSyncChoice.DOWNLOAD -> CloudSyncOutcome(choice,
                         "Newer encrypted cloud data is available. Open Cloud and confirm import.", remote)
                     CloudSyncChoice.CONFLICT -> CloudSyncOutcome(choice,
