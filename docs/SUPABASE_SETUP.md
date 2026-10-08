@@ -28,6 +28,7 @@ ON CONFLICT (id) DO UPDATE SET
 
 DROP POLICY IF EXISTS "RouteRevive read own backups" ON storage.objects;
 DROP POLICY IF EXISTS "RouteRevive insert own backups" ON storage.objects;
+DROP POLICY IF EXISTS "RouteRevive delete own backups" ON storage.objects;
 
 CREATE POLICY "RouteRevive read own backups"
   ON storage.objects
@@ -45,9 +46,19 @@ CREATE POLICY "RouteRevive insert own backups"
     AND (storage.foldername(name))[1] = (select auth.uid())::text
     AND (storage.filename(name)) LIKE 'backup-%.rrb'
   );
+
+-- v0.2.4: allow owners to delete only their own encrypted archives.
+CREATE POLICY "RouteRevive delete own backups"
+  ON storage.objects
+  FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'route-revive-backups'
+    AND (storage.foldername(name))[1] = (select auth.uid())::text
+    AND (storage.filename(name)) LIKE 'backup-%.rrb'
+  );
 ~~~
 
-Only the account holder can read or insert archives inside their own UUID-named folder. The bucket remains PRIVATE and is never publicly readable. There are intentionally no UPDATE/DELETE policies; each upload creates a timestamped immutable archive. Old archives may accumulate and incur storage charges; they can be managed through the trusted project admin dashboard, or via a later reviewed deletion feature.
+Only the account holder can read, insert, or delete encrypted archives in their own UUID-named folder. The bucket stays PRIVATE and never publicly readable. There is no UPDATE policy. v0.2.4 adds account-scoped DELETE solely for managed archive removal. Existing Supabase projects must add the DELETE policy before app cleanup will work; never weaken RLS or make the bucket public to solve a 403.
 
 The example bucket limits each archive to 50 MiB; this is compatible with typical Supabase free project limits. Larger backups require a supported plan and a higher bucket limit. The Android client has an independent 165 MiB safety limit. **Never disable RLS or make the bucket public to fix an upload error.**
 
@@ -86,3 +97,9 @@ Photos are included inside the encrypted archive, while Supabase Auth processes 
 - **Forgot the automatic backup password:** Existing snapshots cannot be decrypted without it. Disable automatic backup and carefully migrate or restore a known-good archive before re-enabling. Never lose the recovery password.
 
 References: https://supabase.com/docs/guides/auth | https://supabase.com/docs/guides/storage/buckets/fundamentals | https://supabase.com/docs/guides/storage/security/access-control
+
+### v0.2.4: deletion and retention
+
+After updating to v0.2.4, run the new DELETE SQL above in your Supabase SQL editor. The app never requires the secret service-role key. In **More → Private cloud backups**, refresh backup history and tap **Delete** next to an older archive; confirm permanent deletion. The newest overall backup, newest automatic backup, and this phone's cloud sync baseline cannot be deleted from this UI. Deleted archives are not recoverable, and deleting a cloud archive does not remove local records.
+
+Automatic retention is OFF by default (Keep all). With scheduled backups enabled, choose to retain the newest **10, 30, or 60 automatic** archives, or Keep all. Each successful background/foreground sync prunes older automatic snapshots; you can also review and confirm cleanup manually. Manually uploaded backups are never auto-deleted. Pagination must finish safely before cleanup starts. The newest cloud head and *this phone's* sync baseline remain protected, but another phone might rely on an old archive: keep an offline encrypted recovery export before enabling cleanup. Android scheduling may defer the next cleanup.

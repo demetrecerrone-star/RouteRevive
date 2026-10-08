@@ -33,6 +33,9 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
     var backups by remember { mutableStateOf<List<CloudBackupFile>>(emptyList()) }
     var archivePassword by remember { mutableStateOf("") }
     var selectedRestore by remember { mutableStateOf<CloudBackupFile?>(null) }
+    var pendingDelete by remember { mutableStateOf<CloudBackupFile?>(null) }
+    var cleanupConfirm by remember { mutableStateOf(false) }
+    var retentionKeep by remember { mutableIntStateOf(vault.retentionKeep()) }
     var showUpload by remember { mutableStateOf(false) }
     var autoEnabled by remember { mutableStateOf(vault.automaticEnabled()) }
     var chosenHours by remember { mutableLongStateOf(vault.autoHours().takeIf { it > 0 } ?: 24L) }
@@ -218,12 +221,19 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
                                 backups = withContext(Dispatchers.IO) {
                                     SupabaseCloud(settings).backups(result)
                                 }
-                                "Found " + backups.size + " cloud backup(s)."
+                                "Showing " + backups.size + " newest cloud backup(s)."
                             }
                         }) { Text("Refresh cloud backup history") }
 
                     if (backups.isEmpty()) Text("No backups loaded. Select Refresh to list your files.",
                         color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp)
+                    if (backups.isNotEmpty()) {
+                        Text("${backups.size} snapshots · " +
+                            "${backups.sumOf { it.size.coerceAtLeast(0L) } / (1024 * 1024)} MiB listed",
+                            fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                        Text("Newest 50 shown. Retention checks all archives before deletion.",
+                            fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
+                    }
                     backups.forEach { snapshot ->
                         HorizontalDivider()
                         Text(snapshot.name.removePrefix("backup-").take(15) + " UTC",
@@ -231,10 +241,25 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
                         Text("Size: " + snapshot.size / 1024 + " KB · Created: " +
                             snapshot.createdAt.take(19),
                             color = MaterialTheme.colorScheme.secondary, fontSize = 11.sp)
-                        OutlinedButton(enabled = !busy, onClick = {
-                            archivePassword = ""
-                            selectedRestore = snapshot
-                        }) { Text("Restore this snapshot") }
+                        Text(if (CloudRules.isAutomaticName(snapshot.name)) "Automatic snapshot"
+                            else "Manual snapshot", fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.secondary)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(enabled = !busy, onClick = {
+                                archivePassword = ""
+                                selectedRestore = snapshot
+                            }) { Text("Restore") }
+                            val protectedSnapshot = snapshot.name == backups.firstOrNull()?.name ||
+                                snapshot.name == backups.firstOrNull {
+                                    CloudRules.isAutomaticName(it.name)
+                                }?.name || snapshot.name == vault.syncBaseline()?.first
+                            if (!protectedSnapshot) TextButton(enabled = !busy,
+                                onClick = { pendingDelete = snapshot }) {
+                                Text("Delete", color = MaterialTheme.colorScheme.error)
+                            } else Text("Protected", fontSize = 11.sp,
+                                modifier = Modifier.padding(top = 14.dp),
+                                color = MaterialTheme.colorScheme.secondary)
+                        }
                     }
                 }
 
@@ -244,6 +269,14 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
                         "Use the same password on your other device to import snapshots. " +
                         "Only changed data is uploaded; nothing is imported in the background.",
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+                    val health = CloudHealthRules.evaluate(
+                        autoEnabled, syncStatus, syncTime, vault.autoHours())
+                    Text(health.title, fontWeight = FontWeight.Bold,
+                        color = if (health.state in listOf(CloudHealthState.ACTION_REQUIRED,
+                            CloudHealthState.STALE)) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.primary)
+                    Text(health.detail, fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.secondary)
                     if (!autoEnabled) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterChip(selected = chosenHours == 24L,
@@ -298,11 +331,41 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
                             syncStatus = vault.lastSyncStatus()
                             syncTime = vault.lastSyncTime()
                         }) { Text("Refresh sync status") }
+                        CloudPanel("Automatic backup retention") {
+                            Text("Optional: keep the newest automatic snapshots. " +
+                                "Cleanup runs after a successful sync. Manual archives " +
+                                "are never deleted automatically.",
+                                fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                CloudRetentionRules.choices.forEach { keep ->
+                                    FilterChip(selected = retentionKeep == keep, onClick = {
+                                        runCatching {
+                                            vault.setRetentionKeep(keep)
+                                            retentionKeep = keep
+                                            message = if (keep == 0) "Keep all selected."
+                                                else "Keeping $keep newest automatic archives. " +
+                                                    "Cleanup runs after the next cloud sync."
+                                        }.onFailure { error = it.message ?: "Could not save retention." }
+                                    }, label = { Text(if (keep == 0) "All" else "$keep") })
+                                }
+                            }
+                            if (retentionKeep > 0) {
+                                OutlinedButton(enabled = !busy,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = { cleanupConfirm = true }) {
+                                    Text("Clean up older archives now")
+                                }
+                                Text("Other devices may rely on older archives. " +
+                                    "Create an offline backup before cleanup.",
+                                    fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
+                            }
+                        }
                         TextButton(enabled = !busy, onClick = {
                             runCatching {
                                 CloudBackupScheduler.stop(context)
                                 vault.disableAutomatic()
                                 autoEnabled = false
+                                retentionKeep = 0
                                 automaticPassword = ""
                                 message = "Automatic backups stopped. Cloud archives were not deleted."
                             }.onFailure { error = it.message ?: "Could not stop automatic backups." }
@@ -336,6 +399,58 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
             "Keep an offline backup too. Cloud storage costs and limits depend on your provider.",
             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
     }
+
+    pendingDelete?.let { snapshot ->
+        AlertDialog(
+            onDismissRequest = { if (!busy) pendingDelete = null },
+            title = { Text("Permanently delete this backup?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("This removes the encrypted cloud archive permanently. " +
+                        "You cannot recover it, and another device may depend on it. " +
+                        "Local phone records are not deleted.")
+                    Text(snapshot.name, fontSize = 11.sp)
+                }
+            },
+            confirmButton = { TextButton(enabled = !busy, onClick = {
+                pendingDelete = null
+                startWork {
+                    val latest = withContext(Dispatchers.IO) {
+                        CloudSyncEngine.deleteOldSnapshot(vault, snapshot.name)
+                        val signed = CloudAuth.refresh(vault, settings)
+                        SupabaseCloud(settings).backups(signed)
+                    }
+                    backups = latest
+                    "Old encrypted cloud backup permanently deleted."
+                }
+            }) { Text("Delete permanently", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) {
+                Text("Keep backup")
+            } }
+        )
+    }
+
+    if (cleanupConfirm) AlertDialog(
+        onDismissRequest = { if (!busy) cleanupConfirm = false },
+        title = { Text("Clean up old automatic backups?") },
+        text = { Text("Keep the newest $retentionKeep automatic backups, " +
+            "plus protected cloud heads and this device's sync baseline. " +
+            "Manual backups are preserved. Deleted archives cannot be recovered. " +
+            "Other devices may need an older version.") },
+        confirmButton = { TextButton(enabled = !busy, onClick = {
+            cleanupConfirm = false
+            startWork {
+                val result = withContext(Dispatchers.IO) {
+                    val count = CloudSyncEngine.cleanupNow(vault)
+                    val signed = CloudAuth.refresh(vault, settings)
+                    count to SupabaseCloud(settings).backups(signed)
+                }
+                backups = result.second
+                "${result.first} old automatic backup(s) deleted. Protected archives remain."
+            }
+        }) { Text("Delete older backups") } },
+        dismissButton = { TextButton(onClick = { cleanupConfirm = false }) { Text("Cancel") } }
+    )
 
     if (showUpload) AlertDialog(onDismissRequest = {
         if (!busy) { showUpload = false; archivePassword = "" }
