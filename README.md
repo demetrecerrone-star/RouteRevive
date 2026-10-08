@@ -1,4 +1,24 @@
-# RouteRevive
+# RouteRevive v0.0.6 — Jobs, Invoices & Custom Icon
+
+RouteRevive now supports the full local service workflow from booking through customer record, job notes, work photos, PDF estimate/invoice and manual payment ledger.
+
+## New in v0.0.6
+- **Jobs tab:** every appointment becomes a linked job record. Add line items (service, quantity, unit price), work instructions and business name.
+- **Before / after photos:** take photos or import from gallery into app-private local storage. View or delete photos from the job.
+- **PDFs:** share estimates and invoices through Android's native share sheet using temporary PDF files and a restricted FileProvider.
+- **Payments:** record deposits and final payments already received, view balances and overdue issued invoices. No money is processed by RouteRevive.
+- **Custom app icon:** a green landscape with a winding road and leaf, supplied as an adaptive Android launcher icon.
+- Existing customer records, marketing-consent rules, appointments, route planning, maps and campaign workflows remain intact.
+- The Android package remains `com.routerevive.app` and versionCode increases from 5 to 6; install the signed APK over signed v0.0.5 without uninstalling.
+
+**Backup limitation:** JSON export/import includes job details, line items, photo *references*, payments and invoices, but **NOT the actual photo image bytes**. Private photos remain on the same device during an in-place update; they will be lost if the app is uninstalled or its storage is cleared. Save copies of important photos separately in your gallery. Backup JSON contains customer and financial data and is not encrypted.
+
+**Financial/legal scope:** This prototype generates simple manually managed PDF estimates/invoices. No tax calculations, automated payment processing, refund handling, accounting integrations or legal invoicing guarantees. Verify invoices and amounts before sharing.
+
+## Installation
+Download the `RouteRevive-v0.0.6-signed` artifact from [GitHub Actions](https://github.com/demetrecerrone-star/RouteRevive/actions/workflows/android.yml), unzip and install `app-release.apk` directly over your previous *signed* version.
+
+# Previous releases
 
 **Version 0.0.5 — Smart Route Planning (local-first Android app)**
 
@@ -42,7 +62,7 @@ This repository now expects a private persistent signing key for published APKs.
 1. Generate or retain the owner's private PKCS12 signing key and password in a secure offline backup.
 2. Base64-encode the PKCS12 keystore and add a repository Actions secret named `RR_KEYSTORE_BASE64`.
 3. Add the matching password under `RR_STORE_PASSWORD`.
-4. The GitHub workflow runs tests and creates an APK signed with this key. Use the **RouteRevive-v0.0.5-signed** artifact from a successful run.
+4. The GitHub workflow runs tests and creates an APK signed with this key. Use the **RouteRevive-v0.0.6-signed** artifact from a successful run.
 5. For every update, reuse the **same secrets**, increment `versionCode`, and keep the Android `applicationId` unchanged.
 
 **The previous v0.0.1 and v0.0.4 debug APKs used ephemeral signing keys.** These APKs are not directly upgradable to this new permanent signature. If no important data exists, uninstall the debug APK before installing the newly signed v0.0.4 release once. That creates the stable update path going forward.
@@ -54,7 +74,7 @@ RouteRevive helps local pressure-washing and service businesses recontact previo
 ## Download the Android APK
 
 1. Once signing secrets are configured, open [the Android build history](https://github.com/demetrecerrone-star/RouteRevive/actions/workflows/android.yml).
-2. Under **Artifacts**, choose **RouteRevive-v0.0.5-signed** (sign into GitHub if prompted).
+2. Under **Artifacts**, choose **RouteRevive-v0.0.6-signed** (sign into GitHub if prompted).
 3. Download and unzip the artifact, then install `app-release.apk` on Android 8.0 or newer.
 4. This is a privately signed testing release, **not yet a Google Play production release**. Android may ask you to allow installation from your files app. Install only if you trust your own repository's build.
 
