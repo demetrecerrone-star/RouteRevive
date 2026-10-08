@@ -17,13 +17,13 @@ jobs:
           java-version: '17'
       - uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.10.2'
+          gradle-version: '8.11.1'
 
       - name: Run Android unit tests
-        run: gradle --no-daemon testDebugUnitTest
+        run: gradle --no-daemon testDebugUnitTest lintRelease
 
       - name: Require persistent signing secrets
         env:
@@ -41,7 +41,7 @@ jobs:
         env:
           RR_SIGNING_FILE: ${{ github.workspace }}/app/routerevive-release.p12
           RR_STORE_PASSWORD: ${{ secrets.RR_STORE_PASSWORD }}
-        run: gradle --no-daemon assembleRelease
+        run: gradle --no-daemon assembleRelease bundleRelease
 
       - name: Remove signing key from runner workspace
         if: always()
@@ -49,6 +49,11 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: RouteRevive-v0.0.9-signed
+          name: RouteRevive-v0.1.0-signed
           path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RouteRevive-v0.1.0-app-bundle
+          path: app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
