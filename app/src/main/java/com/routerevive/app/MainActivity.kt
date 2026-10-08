@@ -329,15 +329,48 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(moneyInput, { moneyInput = it }, label = { Text("Amount (USD)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
+                    if (mode == "book") {
+                        Text("Appointment date: ${c?.visitDate ?: ""}", fontSize = 12.sp)
+                        OutlinedTextField(bookingTime, { bookingTime = it }, label = { Text("Start HH:mm") })
+                        OutlinedTextField(bookingDuration, { bookingDuration = it },
+                            label = { Text("Duration (minutes)") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                        val candidate = if (c != null) Appointment(customerId = recipientId,
+                            service = c.service, date = c.visitDate, time = bookingTime,
+                            durationMinutes = bookingDuration.toIntOrNull() ?: 60) else null
+                        if (candidate != null && ScheduleRules.overlaps(candidate, appointments.toList())) {
+                            Text("Appointment overlaps an existing booking.",
+                                color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                        }
+                    }
                 }
             },
             confirmButton = {
                 TextButton(enabled = c != null && r != null && amount != null && amount > 0 &&
-                    (mode != "book" || CampaignRules.bookedSlots(c) < c.capacity),
+                    (mode != "book" || (
+                        CampaignRules.bookedSlots(c) < c.capacity &&
+                        ScheduleRules.validDate(c.visitDate) &&
+                        ScheduleRules.validTime(bookingTime) &&
+                        (bookingDuration.toIntOrNull() ?: 0) in 15..480 &&
+                        !ScheduleRules.overlaps(Appointment(customerId = recipientId,
+                            service = c.service, date = c.visitDate, time = bookingTime,
+                            durationMinutes = bookingDuration.toIntOrNull() ?: 60), appointments.toList())
+                    )),
                     onClick = {
                         if (c != null && r != null && amount != null && amount > 0) {
-                            if (mode == "book" && CampaignRules.bookedSlots(c) < c.capacity)
-                                updateRecipient(c, r.copy(status = "BOOKED", bookedAmount = amount))
+                            if (mode == "book" && CampaignRules.bookedSlots(c) < c.capacity &&
+                                ScheduleRules.validTime(bookingTime) &&
+                                (bookingDuration.toIntOrNull() ?: 0) in 15..480) {
+                                val appointment = Appointment(customerId = recipientId,
+                                    service = c.service, date = c.visitDate, time = bookingTime,
+                                    durationMinutes = bookingDuration.toInt(), price = amount,
+                                    campaignId = c.id)
+                                if (!ScheduleRules.overlaps(appointment, appointments.toList())) {
+                                    appointments.add(appointment)
+                                    updateRecipient(c, r.copy(status = "BOOKED", bookedAmount = amount))
+                                    save()
+                                }
+                            }
                             if (mode == "paid") updateRecipient(c, r.copy(status = "PAID", paidAmount = amount))
                         }
                         moneyDialog = null
@@ -345,6 +378,27 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
             },
             dismissButton = { TextButton(onClick = { moneyDialog = null }) { Text("Cancel") } }
         )
+    }
+
+    if (importCandidate != null) {
+        AlertDialog(onDismissRequest = { importCandidate = null },
+            title = { Text("Replace local data from backup?") },
+            text = { Text("This will replace all customers, campaigns and appointments on this phone. The selected file must be a RouteRevive JSON backup. Store backups privately.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val content = importCandidate ?: ""
+                    runCatching {
+                        store.importJson(content)
+                        customers.clear(); customers.addAll(store.loadCustomers())
+                        campaigns.clear(); campaigns.addAll(store.loadCampaigns())
+                        appointments.clear(); appointments.addAll(store.loadAppointments())
+                    }.onSuccess { lastBackupMessage = "Backup imported successfully"; appError = "" }
+                     .onFailure { appError = "Import rejected: ${it.message}" }
+                    importCandidate = null
+                }) { Text("Replace data") }
+            }, dismissButton = {
+                TextButton(onClick = { importCandidate = null }) { Text("Cancel") }
+            })
     }
 }
 
