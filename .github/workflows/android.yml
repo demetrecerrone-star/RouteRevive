@@ -59,3 +59,38 @@ jobs:
           name: RouteRevive-v0.2.4-app-bundle
           path: app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
+
+  publish-direct-apk:
+    needs: test-and-build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: RouteRevive-v0.2.4-signed
+          path: release
+
+      - name: Prepare stable direct APK link
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s release/app-release.apk
+          cp release/app-release.apk release/RouteRevive.apk
+          version=$(sed -n 's/^[[:space:]]*versionName = "\(.*\)"/\1/p' app/build.gradle.kts | head -1)
+          test -n "$version"
+          echo "name=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release and direct APK asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.name }}
+          name: RouteRevive v${{ steps.version.outputs.name }}
+          files: release/RouteRevive.apk
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          make_latest: true
+          generate_release_notes: true
