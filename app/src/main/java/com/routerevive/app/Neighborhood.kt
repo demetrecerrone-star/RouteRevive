@@ -264,7 +264,110 @@ fun NeighborhoodMapScreen(
             // All lower-page fields scroll independently of the map view.
             Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)) {
-${detail}
+        Text("NEARBY REPEAT-SERVICE OPPORTUNITIES", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        if (pins.isNotEmpty()) {
+            Box {
+                OutlinedButton(onClick = { anchorDropdown = true },
+                    modifier = Modifier.fillMaxWidth()) {
+                    Text("Anchor: ${anchor?.name ?: "Select customer"}", maxLines = 1)
+                }
+                DropdownMenu(expanded = anchorDropdown, onDismissRequest = { anchorDropdown = false }) {
+                    pins.forEach { customer ->
+                        DropdownMenuItem(text = { Text(customer.name) }, onClick = {
+                            anchorId = customer.id
+                            anchorDropdown = false
+                        })
+                    }
+                }
+            }
+            Text("Search radius: ${radiusMiles.toInt()} miles (straight-line)", fontSize = 13.sp)
+            Slider(value = radiusMiles, onValueChange = { radiusMiles = it }, valueRange = 1f..25f,
+                steps = 23)
+            Text("${candidates.size} eligible customers near the anchor (same service and ZIP)",
+                fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+            candidates.take(12).forEach { (customer, distance) ->
+                Text("• ${customer.name} — ${"%.1f".format(Locale.US, distance)} mi · ${customer.service}",
+                    fontSize = 13.sp)
+            }
+            if (candidates.isNotEmpty() && anchor != null) {
+                Button(onClick = { onStartCampaign(anchor.zip, anchor.service) },
+                    modifier = Modifier.fillMaxWidth()) {
+                    Text("Create matching neighborhood campaign")
+                }
+            } else {
+                Text("Only contacts with documented marketing permission and no campaign exclusions appear here.",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+            }
+        }
+
+        HorizontalDivider()
+        Text("SCHEDULED APPOINTMENT ROUTE", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        OutlinedTextField(value = routeDate, onValueChange = { routeDate = it },
+            label = { Text("Service date (YYYY-MM-DD)") }, singleLine = true,
+            modifier = Modifier.fillMaxWidth())
+        if (runCatching { LocalDate.parse(routeDate) }.isFailure) {
+            Text("Enter a valid date.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+        } else {
+            if (route.isEmpty()) {
+                Text("No mapped appointments on this date.", fontSize = 13.sp)
+            } else {
+                route.forEachIndexed { index, (appointment, customer) ->
+                    Text("${index + 1}. ${appointment.time} · ${customer.name} · ${appointment.service}",
+                        fontSize = 13.sp)
+                }
+            }
+            if (route.size >= 2) Button(onClick = { showDirectionsConfirm = true },
+                modifier = Modifier.fillMaxWidth()) {
+                Text("Open driving directions (${min(route.size, 8)} stops)")
+            }
+            if (route.size > 8) {
+                Text("Only the first eight stops are sent to navigation. Divide longer routes into groups.",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+            }
+        }
+        Text("Appointments remain in their scheduled time order. The map connects pins with straight lines; road routing and driving times are calculated by the navigation app.",
+            color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp)
+
+        HorizontalDivider()
+        Text("ADD CUSTOMER MAP PINS", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        if (missing.isEmpty()) Text("All customers with street addresses have pins. You can adjust coordinates in their customer profiles.",
+            fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+        missing.take(30).forEach { customer ->
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text(customer.name, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Text("${customer.address}, ${customer.zip}",
+                        fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
+                }
+                TextButton(enabled = locatingId == null, onClick = {
+                    locatingId = customer.id
+                    error = ""
+                    val query = "${customer.address}, ${customer.zip}, USA"
+                    thread(name = "route-revive-address-search") {
+                        val result = runCatching {
+                            if (!Geocoder.isPresent()) error("Address search unavailable on this device")
+                            @Suppress("DEPRECATION")
+                            val found = Geocoder(context.applicationContext, Locale.US)
+                                .getFromLocationName(query, 1)?.firstOrNull()
+                                ?: error("Address not found; enter coordinates manually")
+                            require(found.latitude in -90.0..90.0 && found.longitude in -180.0..180.0)
+                            PinProposal(customer.id, found.latitude, found.longitude,
+                                found.getAddressLine(0) ?: query)
+                        }
+                        Handler(Looper.getMainLooper()).post {
+                            locatingId = null
+                            result.onSuccess { pinProposal = it }
+                                .onFailure { error = it.message ?: "Address lookup unavailable" }
+                        }
+                    }
+                }) { Text(if (locatingId == customer.id) "Finding…" else "Locate") }
+            }
+        }
+        if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+        Text("Privacy: Map tiles reveal the viewed map area to OpenStreetMap infrastructure. Locating an address may send it to your device's geocoding provider. Opening directions shares chosen coordinates with Google Maps. No bulk address lookup or background location tracking.",
+            fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
+        Spacer(Modifier.height(12.dp))
+
             }
         }
     }
