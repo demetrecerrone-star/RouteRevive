@@ -1,21 +1,22 @@
 # RouteRevive
 
-**Version 0.0.1 — Android MVP (local-only)**
+**Version 0.0.2 — Android MVP (local-only)**
 
 RouteRevive helps local pressure-washing and service businesses recontact previous customers and track neighborhood repeat-service offers, without automated bulk messaging.
 
 ## Download the Android APK
 
-1. Open [the successful v0.0.1 Android build](https://github.com/demetrecerrone-star/RouteRevive/actions/runs/37723262063).
-2. Under **Artifacts**, choose **RouteRevive-v0.0.1-debug** (sign into GitHub if prompted).
+1. Open [the successful v0.0.2 Android build](https://github.com/demetrecerrone-star/RouteRevive/actions/runs/37723262063).
+2. Under **Artifacts**, choose **RouteRevive-v0.0.2-debug** (sign into GitHub if prompted).
 3. Download and unzip the artifact, then install `app-debug.apk` on Android 8.0 or newer.
 4. This is a development APK, **not a Google Play production release**. Android may ask you to allow installation from your files app. Install only if you trust your own repository's build.
 
 GitHub Actions automatically runs unit tests and builds an APK whenever the main branch changes. Debug APKs built on separate runners may use different signing keys and require uninstalling the prior test version; uninstalling deletes locally stored records. Stable release signing and export/backups must be added before using live business data.
 
-## Features in v0.0.1
+## Features in v0.0.2
 
-- Add customer contact details, ZIP, prior service/date, and service amount.
+- Add and **edit** customer contact details, ZIP, prior service/date, street address, notes and service amount.
+- Search customers by name, phone, ZIP, or service.
 - Enter a statement documenting customer marketing permission; suppress contacts lacking recorded permission.
 - Suppress opted-out contacts, future-booked customers, customers with open issues, recent service (180 days), recent contact (60 days), duplicate phone records, and people already targeted in another active campaign.
 - Build neighborhood offers with a specific service, appointment date, price, expiration, discount, and booking limit.
@@ -23,6 +24,9 @@ GitHub Actions automatically runs unit tests and builds an APK whenever the main
 - Open the owner's SMS app with prefilled recipient/message; **nothing is sent automatically**.
 - Owner must separately confirm they actually sent the message. Opening the SMS app does not mean delivery.
 - Mark interest, book confirmed appointments, complete service, and record actual paid revenue.
+- Create local appointments with date/time, duration, notes and price; prevent overlapping bookings.
+- Campaign bookings appear on the appointment schedule.
+- Export a JSON backup using Android's document picker; import with confirmation and format validation.
 - Data persists locally using app-private Android SharedPreferences, with cloud backups disabled.
 
 ## Critical limitations
@@ -32,7 +36,11 @@ GitHub Actions automatically runs unit tests and builds an APK whenever the main
 - Permission evidence is recorded by the business owner but not independently verified by the app.
 - Recipients can reply in the owner's SMS app; replies are not automatically captured by RouteRevive.
 - ZIP-code grouping is used; there is not yet a live map or geographic route optimization.
-- No secure export or recovery: uninstalling or clearing app data permanently loses the local customer and campaign records. **Use fictitious data for initial testing.**
+- Export/import is available as unencrypted JSON: the backup contains personal information. Store files in a private, trusted location and protect access. Restore replaces local data.
+- Uninstalling still deletes in-app records; export a backup **before** uninstalling.
+- Because v0.0.1's APK came from an ephemeral GitHub Actions runner debug key, v0.0.2 might not install over v0.0.1. If Android reports an incompatible signature, **uninstalling v0.0.1 deletes its data, and v0.0.1 has no export feature**. Do not uninstall if you need those records; preserve them or contact the developer about data extraction before changing versions.
+- Future APKs need one consistent private signing key (for instance, configured via GitHub Actions encrypted secrets) to support non-destructive updates. Do not commit a private signing key to the public repository.
+- **Use fictitious data for initial testing.**
 - This is a functional **prototype**, not a ready-to-sell mass-marketing solution. Review TCPA and relevant state/federal privacy and text marketing requirements before any production use.
 
 ## Development
@@ -45,7 +53,8 @@ GitHub Actions automatically runs unit tests and builds an APK whenever the main
 
 ## Roadmap
 
-- v0.0.2: customer editing, stronger consent evidence capture, CSV import, secure export, calendar booking windows.
+- v0.0.2: basic customer editing and search, scheduling, JSON export/import (this version).
+- v0.0.3: CSV import, encrypted local storage, more granular appointment time windows, stable private signing.
 - v0.0.3: business accounts, multi-device secure sync, stable signing and recoverable data.
 - Later: service-area maps, self-service booking pages, compliant opt-in SMS provider, subscription billing.
 
