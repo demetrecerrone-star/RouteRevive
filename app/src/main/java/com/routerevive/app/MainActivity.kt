@@ -76,6 +76,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
     val campaigns = remember { mutableStateListOf<Campaign>().apply { addAll(store.loadCampaigns()) } }
     val appointments = remember { mutableStateListOf<Appointment>().apply { addAll(store.loadAppointments()) } }
     val jobs = remember { mutableStateListOf<JobRecord>().apply { addAll(store.loadJobs()) } }
+    val bookingRequests = remember { mutableStateListOf<BookingRequest>().apply { addAll(store.loadBookingRequests()) } }
     var business by remember { mutableStateOf(store.loadBusinessProfile()) }
     var launchLock by remember { mutableStateOf(store.isAppLockEnabled()) }
     val scope = rememberCoroutineScope()
@@ -141,6 +142,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                     campaigns.clear(); campaigns.addAll(store.loadCampaigns())
                     appointments.clear(); appointments.addAll(store.loadAppointments())
                     jobs.clear(); jobs.addAll(store.loadJobs())
+                    bookingRequests.clear(); bookingRequests.addAll(store.loadBookingRequests())
                     business = store.loadBusinessProfile()
                     lastBackupMessage = "Encrypted backup restored with photos and financial records."
                     appError = ""
@@ -161,8 +163,45 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
     }
 
     fun save() {
-        try { store.save(customers.toList(), campaigns.toList(), appointments.toList(), jobs.toList(), business); appError = "" }
+        try { store.save(customers.toList(), campaigns.toList(), appointments.toList(), jobs.toList(), business, bookingRequests.toList()); appError = "" }
         catch (e: Exception) { appError = "Unable to save changes: ${e.message}" }
+    }
+    fun confirmBookingRequest(incoming: BookingRequest) {
+        val index = bookingRequests.indexOfFirst { it.id == incoming.id }
+        if (index < 0) { appError = "Booking request is missing."; return }
+        val current = bookingRequests[index]
+        if (current.status !in setOf("NEW", "CONTACTED")) {
+            appError = "This request was already resolved."
+            return
+        }
+        val proposal = current.copy(
+            requestedDate = incoming.requestedDate,
+            requestedTime = incoming.requestedTime,
+            durationMinutes = incoming.durationMinutes,
+            quotedPrice = incoming.quotedPrice)
+        if (!BookingRules.bookable(proposal, appointments.toList())) {
+            appError = "Cannot confirm: invalid date/time or another booking occupies this slot."
+            return
+        }
+        val phoneDigits = CampaignRules.digits(proposal.phone)
+        val known = customers.firstOrNull { CampaignRules.digits(it.phone) == phoneDigits }
+        val customer = known ?: Customer(
+            name = proposal.name, phone = proposal.phone, zip = proposal.zip,
+            service = proposal.service, lastService = LocalDate.now().toString(),
+            consent = false,
+            notes = "New booking inquiry; no earlier completed service verified."
+        )
+        val appointment = Appointment(
+            customerId = customer.id, service = proposal.service,
+            date = proposal.requestedDate, time = proposal.requestedTime,
+            durationMinutes = proposal.durationMinutes, price = proposal.quotedPrice,
+            notes = proposal.notes)
+        // One commit covers the new customer, appointment and request status.
+        if (known == null) customers.add(customer)
+        appointments.add(appointment)
+        bookingRequests[index] = proposal.copy(status = "BOOKED",
+            bookedAppointmentId = appointment.id)
+        save()
     }
     fun updateJob(job: JobRecord) {
         val appointment = appointments.firstOrNull { it.id == job.appointmentId }
@@ -251,10 +290,10 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
         ).isEmpty() && !LocalDate.parse(campaign.expiryDate).isBefore(LocalDate.now())
 
     val current = campaigns.firstOrNull { it.id == selectedId }
-    BackHandler(page !in setOf("home", "customers", "campaigns", "schedule", "map", "jobs", "business")) {
+    BackHandler(page !in setOf("home", "customers", "campaigns", "schedule", "map", "jobs", "business", "requests")) {
         page = when (page) {
             "campaign_detail", "new_campaign" -> "campaigns"
-            "business" -> "home"
+            "business", "requests" -> "home"
             else -> "customers"
         }
     }
@@ -288,6 +327,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         "schedule" -> "Appointments"
                         "jobs" -> "Jobs & invoices"
                         "business" -> "Business essentials"
+                        "requests" -> "Booking requests"
                         "map" -> "Neighborhood map"
                         "campaigns" -> "Neighborhood campaigns"
                         "new_campaign" -> "New campaign"
@@ -302,7 +342,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                 } else if (page !in listOf("home")) {
                     IconButton(onClick = { page = when (page) {
                         "campaign_detail", "new_campaign" -> "campaigns"
-                        "business" -> "home"
+                        "business", "requests" -> "home"
                         else -> "customers"
                     } }) {
                         Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
@@ -312,21 +352,36 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
             if (appError.isNotBlank()) Text(appError, color = Color(0xFFFF9D9D),
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp))
             when (page) {
-                "home" -> HomeScreen(customers, campaigns,
-                    onCustomers = { page = "customers" }, onCampaigns = { page = "campaigns" },
-                    onJobs = { page = "jobs" }, onSchedule = { page = "schedule" },
+                "home" -> DashboardScreen(
+                    customers = customers.toList(), campaigns = campaigns.toList(),
+                    appointments = appointments.toList(), jobs = jobs.toList(),
+                    requests = bookingRequests.toList(), business = business,
+                    onCustomers = { page = "customers" },
+                    onJobs = { page = "jobs" },
+                    onSchedule = { page = "schedule" },
+                    onRequests = { page = "requests" },
+                    onCampaigns = { page = "campaigns" },
                     onBusiness = { page = "business" },
-                    jobs = jobs.toList(),
-                    onNew = {
-                        campaignZipFromMap = ""
-                        campaignServiceFromMap = "House pressure washing"
-                        page = "new_campaign"
-                    },
                     onExport = { backupAction = "export"; backupPassword = "" },
                     onImport = { backupAction = "import"; backupPassword = "" },
                     onLegacyImport = { importLauncher.launch(arrayOf("application/json", "text/plain")) },
-                    backupBusy = backupBusy,
-                    backupMessage = lastBackupMessage)
+                    backupBusy = backupBusy, backupMessage = lastBackupMessage)
+                "requests" -> RequestsScreen(
+                    requests = bookingRequests.toList(),
+                    appointments = appointments.toList(),
+                    onAdd = { request ->
+                        if (BookingRules.valid(request)) {
+                            bookingRequests.add(request); save()
+                        } else appError = "Invalid booking request."
+                    },
+                    onStatus = { request, status ->
+                        val i = bookingRequests.indexOfFirst { it.id == request.id }
+                        if (i >= 0 && bookingRequests[i].status in setOf("NEW", "CONTACTED") &&
+                            status in setOf("CONTACTED", "DECLINED")) {
+                            bookingRequests[i] = bookingRequests[i].copy(status = status); save()
+                        }
+                    },
+                    onBook = { confirmBookingRequest(it) })
                 "customers" -> CustomerScreen(customers.toList(),
                     onAdd = { page = "new_customer" },
                     onEdit = { editingCustomerId = it; page = "edit_customer" },
@@ -375,7 +430,26 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                             appointments.add(appointment); save()
                         } else appError = "Time slot overlaps another booking."
                     }, onStatus = { a, status -> updateAppointmentStatus(a, status) },
-                    onReschedule = { revised -> rescheduleAppointment(revised) })
+                    onReschedule = { revised -> rescheduleAppointment(revised) },
+                    onRemind = { appointment ->
+                        val currentAppointment = appointments.firstOrNull { it.id == appointment.id }
+                        val customer = customers.firstOrNull { it.id == currentAppointment?.customerId }
+                        if (currentAppointment != null && customer != null &&
+                            ReminderRules.canDraft(currentAppointment, customer)) {
+                            openSms(customer.phone, ReminderRules.draft(
+                                currentAppointment, customer, business.name))
+                        } else appError = "Reminder blocked: check customer preferences and booking date."
+                    },
+                    onMarkReminded = { appointment ->
+                        val i = appointments.indexOfFirst { it.id == appointment.id }
+                        val customer = customers.firstOrNull { it.id == appointment.customerId }
+                        if (i >= 0 && customer != null &&
+                            ReminderRules.canDraft(appointments[i], customer)) {
+                            appointments[i] = appointments[i].copy(
+                                lastReminderAt = LocalDate.now().toString())
+                            save()
+                        }
+                    })
 
                 "campaigns" -> CampaignScreen(campaigns.toList(),
                     onNew = {
