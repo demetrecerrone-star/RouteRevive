@@ -337,36 +337,12 @@ class LocalStore(context: Context) {
     fun exportJson(): String = data().apply { put("schemaVersion", 7) }.toString(2)
 
     fun importJson(payload: String) {
-        val root = JSONObject(payload)
-        require(root.optInt("schemaVersion", 1) in 1..7) { "Unsupported backup version" }
-        require(root.optJSONArray("customers") != null && root.optJSONArray("campaigns") != null) {
-            "Not a RouteRevive backup"
-        }
-        require(root.length() <= 12) { "Unexpected backup structure" }
-        require(payload.length <= 5_000_000) { "Backup is too large" }
-        val old = prefs.getString("db", "{}") ?: "{}"
-        persistDb(root.toString())
-        try {
-            val parsedCustomers = loadCustomers()
-            val parsedCampaigns = loadCampaigns()
-            val parsedAppointments = loadAppointments()
-            val parsedJobs = loadJobs()
-            val parsedRequests = loadBookingRequests()
-            require(parsedCustomers.size == root.getJSONArray("customers").length()) { "Invalid customer data" }
-            require(parsedCampaigns.size == root.getJSONArray("campaigns").length()) { "Invalid campaign data" }
-            require(parsedAppointments.size == (root.optJSONArray("appointments")?.length() ?: 0)) {
-                "Invalid appointment data"
-            }
-            require(parsedJobs.size == (root.optJSONArray("jobs")?.length() ?: 0)) {
-                "Invalid job data"
-            }
-            require(parsedRequests.size == (root.optJSONArray("bookingRequests")?.length() ?: 0)) {
-                "Invalid booking requests"
-            }
-        } catch (e: Exception) {
-            prefs.edit().putString("db", old).commit()
-            throw IllegalArgumentException("Backup data is invalid: ${e.message}")
-        }
+        // Validate the entire payload before replacing live encrypted records.
+        // A failed import cannot briefly replace the database, even if the
+        // app is stopped during parsing or validation.
+        BackupValidator.check(payload)
+        val normalized = JSONObject(payload).toString()
+        persistDb(normalized)
     }
 
     fun save(customers: List<Customer>, campaigns: List<Campaign>, appointments: List<Appointment> = emptyList(), jobs: List<JobRecord> = emptyList(), business: BusinessProfile = BusinessProfile(), requests: List<BookingRequest> = emptyList()) {
