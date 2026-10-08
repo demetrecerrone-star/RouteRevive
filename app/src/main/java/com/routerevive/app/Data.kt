@@ -190,12 +190,18 @@ class LocalStore(context: Context) {
     }
 
     fun loadBusinessProfile(): BusinessProfile {
-        val j = data().optJSONObject("businessProfile") ?: return BusinessProfile()
+        val j = data().optJSONObject("businessProfile") ?: JSONObject()
         return BusinessProfile(
             name = j.optString("name"), phone = j.optString("phone"),
             email = j.optString("email"), address = j.optString("address"),
             website = j.optString("website"), paymentTerms = j.optString("paymentTerms"),
-            logoFile = j.optString("logoFile")
+            logoFile = j.optString("logoFile"),
+            workspaceId = j.optString("workspaceId").ifBlank {
+                val existing = prefs.getString("workspace_id", "").orEmpty()
+                if (existing.isNotBlank()) existing else java.util.UUID.randomUUID().toString().also {
+                    check(prefs.edit().putString("workspace_id", it).commit())
+                }
+            }
         )
     }
 
@@ -328,11 +334,11 @@ class LocalStore(context: Context) {
         }
     }
 
-    fun exportJson(): String = data().apply { put("schemaVersion", 6) }.toString(2)
+    fun exportJson(): String = data().apply { put("schemaVersion", 7) }.toString(2)
 
     fun importJson(payload: String) {
         val root = JSONObject(payload)
-        require(root.optInt("schemaVersion", 1) in 1..6) { "Unsupported backup version" }
+        require(root.optInt("schemaVersion", 1) in 1..7) { "Unsupported backup version" }
         require(root.optJSONArray("customers") != null && root.optJSONArray("campaigns") != null) {
             "Not a RouteRevive backup"
         }
@@ -449,6 +455,7 @@ class LocalStore(context: Context) {
             put("website", business.website)
             put("paymentTerms", business.paymentTerms)
             put("logoFile", business.logoFile)
+            put("workspaceId", business.workspaceId)
         }
         val br = JSONArray()
         requests.forEach { request ->
@@ -465,7 +472,7 @@ class LocalStore(context: Context) {
                 put("bookedAppointmentId", request.bookedAppointmentId)
             })
         }
-        persistDb(JSONObject().put("schemaVersion", 6)
+        persistDb(JSONObject().put("schemaVersion", 7)
             .put("customers", cs).put("campaigns", cps).put("appointments", aps)
             .put("jobs", js).put("businessProfile", bp)
             .put("bookingRequests", br).toString())
