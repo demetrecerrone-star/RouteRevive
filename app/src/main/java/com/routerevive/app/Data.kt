@@ -191,11 +191,51 @@ class LocalStore(context: Context) {
         }
     }
 
-    fun exportJson(): String = data().apply { put("schemaVersion", 3) }.toString(2)
+    fun loadJobs(): List<JobRecord> {
+        val array = data().optJSONArray("jobs") ?: return emptyList()
+        return (0 until array.length()).mapNotNull { i ->
+            runCatching {
+                val j = array.getJSONObject(i)
+                val itemArray = j.optJSONArray("lineItems") ?: JSONArray()
+                val photoArray = j.optJSONArray("photos") ?: JSONArray()
+                val paymentArray = j.optJSONArray("payments") ?: JSONArray()
+                JobRecord(
+                    id = j.getString("id"),
+                    appointmentId = j.getString("appointmentId"),
+                    customerId = j.getString("customerId"),
+                    businessName = j.optString("businessName"),
+                    serviceDetails = j.optString("serviceDetails"),
+                    dueDate = j.optString("dueDate"),
+                    invoiceIssued = j.optBoolean("invoiceIssued"),
+                    invoiceNumber = j.optString("invoiceNumber"),
+                    lineItems = (0 until itemArray.length()).map { n ->
+                        val item = itemArray.getJSONObject(n)
+                        JobLineItem(item.getString("description"), item.getDouble("quantity"),
+                            item.getDouble("unitPrice"))
+                    },
+                    photos = (0 until photoArray.length()).mapNotNull { n ->
+                        val photo = photoArray.getJSONObject(n)
+                        val name = photo.getString("filename")
+                        if (!name.matches(Regex("[a-f0-9-]{36}\\.jpg"))) null
+                        else JobPhoto(name, photo.optString("stage", "BEFORE"),
+                            photo.optString("addedAt"))
+                    },
+                    payments = (0 until paymentArray.length()).map { n ->
+                        val payment = paymentArray.getJSONObject(n)
+                        JobPayment(payment.getString("id"), payment.getDouble("amount"),
+                            payment.getString("date"), payment.optString("method"),
+                            payment.optString("notes"))
+                    }
+                )
+            }.getOrNull()
+        }
+    }
+
+    fun exportJson(): String = data().apply { put("schemaVersion", 4) }.toString(2)
 
     fun importJson(payload: String) {
         val root = JSONObject(payload)
-        require(root.optInt("schemaVersion", 1) in 1..3) { "Unsupported backup version" }
+        require(root.optInt("schemaVersion", 1) in 1..4) { "Unsupported backup version" }
         require(root.optJSONArray("customers") != null && root.optJSONArray("campaigns") != null) {
             "Not a RouteRevive backup"
         }
@@ -207,10 +247,14 @@ class LocalStore(context: Context) {
             val parsedCustomers = loadCustomers()
             val parsedCampaigns = loadCampaigns()
             val parsedAppointments = loadAppointments()
+            val parsedJobs = loadJobs()
             require(parsedCustomers.size == root.getJSONArray("customers").length()) { "Invalid customer data" }
             require(parsedCampaigns.size == root.getJSONArray("campaigns").length()) { "Invalid campaign data" }
             require(parsedAppointments.size == (root.optJSONArray("appointments")?.length() ?: 0)) {
                 "Invalid appointment data"
+            }
+            require(parsedJobs.size == (root.optJSONArray("jobs")?.length() ?: 0)) {
+                "Invalid job data"
             }
         } catch (e: Exception) {
             prefs.edit().putString("db", old).commit()
@@ -218,7 +262,7 @@ class LocalStore(context: Context) {
         }
     }
 
-    fun save(customers: List<Customer>, campaigns: List<Campaign>, appointments: List<Appointment> = emptyList()) {
+    fun save(customers: List<Customer>, campaigns: List<Campaign>, appointments: List<Appointment> = emptyList(), jobs: List<JobRecord> = emptyList()) {
         val cs = JSONArray()
         customers.forEach { c ->
             cs.put(JSONObject().apply {
@@ -261,9 +305,45 @@ class LocalStore(context: Context) {
                 put("campaignId", a.campaignId)
             })
         }
-        // Single atomic preference update; v0.0.1 data remains readable on upgrade.
-        check(prefs.edit().putString("db", JSONObject().put("schemaVersion", 3)
-            .put("customers", cs).put("campaigns", cps).put("appointments", aps).toString()).commit()) {
+        val js = JSONArray()
+        jobs.forEach { job ->
+            val lines = JSONArray()
+            job.lineItems.forEach { item ->
+                lines.put(JSONObject().apply {
+                    put("description", item.description); put("quantity", item.quantity)
+                    put("unitPrice", item.unitPrice)
+                })
+            }
+            val photos = JSONArray()
+            job.photos.forEach { photo ->
+                photos.put(JSONObject().apply {
+                    put("filename", photo.filename); put("stage", photo.stage)
+                    put("addedAt", photo.addedAt)
+                })
+            }
+            val payments = JSONArray()
+            job.payments.forEach { payment ->
+                payments.put(JSONObject().apply {
+                    put("id", payment.id); put("amount", payment.amount)
+                    put("date", payment.date); put("method", payment.method)
+                    put("notes", payment.notes)
+                })
+            }
+            js.put(JSONObject().apply {
+                put("id", job.id); put("appointmentId", job.appointmentId)
+                put("customerId", job.customerId)
+                put("businessName", job.businessName)
+                put("serviceDetails", job.serviceDetails)
+                put("lineItems", lines); put("photos", photos)
+                put("payments", payments); put("dueDate", job.dueDate)
+                put("invoiceIssued", job.invoiceIssued)
+                put("invoiceNumber", job.invoiceNumber)
+            })
+        }
+        // One atomic update: new data coexists with pre-v0.0.6 records.
+        check(prefs.edit().putString("db", JSONObject().put("schemaVersion", 4)
+            .put("customers", cs).put("campaigns", cps).put("appointments", aps)
+            .put("jobs", js).toString()).commit()) {
             "Unable to save RouteRevive data"
         }
     }
