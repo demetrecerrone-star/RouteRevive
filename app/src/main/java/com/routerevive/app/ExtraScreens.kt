@@ -223,10 +223,12 @@ fun ScheduleScreen(
                 (0L..6L).forEach { offset ->
                     val day = monday.plusDays(offset)
                     val count = appointments.count { it.date == day.toString() && it.status != "CANCELLED" }
-                    OutlinedButton(onClick = { focusDate = day; filter = "Day" },
+                    Surface(onClick = { focusDate = day; filter = "Day" },
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp)) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        shape = RoundedCornerShape(9.dp),
+                        color = MaterialTheme.colorScheme.surface) {
+                        Column(Modifier.padding(vertical = 7.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(day.dayOfWeek.name.take(1), fontSize = 10.sp)
                             Text(day.dayOfMonth.toString(), fontSize = 12.sp)
                             if (count > 0) Text(count.toString(),
