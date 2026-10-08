@@ -184,6 +184,15 @@ class LocalStore(context: Context) {
 
     private fun data(): JSONObject = JSONObject(readDb())
 
+    fun lastFullBackupDate(): String = prefs.getString("last_full_backup", "").orEmpty()
+
+    fun recordFullBackupCreated() {
+        check(prefs.edit().putString("last_full_backup",
+            java.time.LocalDate.now().toString()).commit()) {
+            "Could not record the last successful backup date"
+        }
+    }
+
     fun isAppLockEnabled(): Boolean = prefs.getBoolean("app_lock", false)
     fun setAppLockEnabled(value: Boolean) {
         check(prefs.edit().putBoolean("app_lock", value).commit())
