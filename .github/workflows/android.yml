@@ -24,6 +24,6 @@ jobs:
         run: gradle --no-daemon testDebugUnitTest assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: RouteRevive-v0.0.1-debug
+          name: RouteRevive-v0.0.2-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
