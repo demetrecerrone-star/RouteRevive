@@ -114,8 +114,9 @@ fun BetaReadinessScreen(
         Text("Map tiles use OpenStreetMap services; locating an address uses the " +
             "phone's geocoder, and directions open an external maps app. SMS and " +
             "email drafts are sent only when the owner or customer acts. " +
-            "There is no cloud customer database, advertising SDK, or " +
-            "automatic SMS sending in this beta.",
+            "The optional Supabase cloud feature can store user-requested password-encrypted backup " +
+            "archives and process business account email/login information through your project. " +
+            "There is no automatic cloud sync, advertising SDK or automatic SMS sending.",
             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
         Text("Google Play submission still requires an accurate published privacy " +
             "policy, Data safety and app access forms, production build review " +
