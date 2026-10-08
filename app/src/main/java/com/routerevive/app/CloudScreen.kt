@@ -17,7 +17,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 
-/** Cloud actions require explicit button presses. Local data always works offline. */
+/** Explicit opt-in for automatic backups; remote imports always require confirmation. */
 @Composable
 fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
     val context = LocalContext.current
@@ -34,16 +34,19 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
     var archivePassword by remember { mutableStateOf("") }
     var selectedRestore by remember { mutableStateOf<CloudBackupFile?>(null) }
     var showUpload by remember { mutableStateOf(false) }
+    var autoEnabled by remember { mutableStateOf(vault.automaticEnabled()) }
+    var chosenHours by remember { mutableLongStateOf(vault.autoHours().takeIf { it > 0 } ?: 24L) }
+    var automaticPassword by remember { mutableStateOf("") }
+    var pendingSync by remember { mutableStateOf<String?>(null) }
+    var syncStatus by remember { mutableStateOf(vault.lastSyncStatus()) }
+    var syncTime by remember { mutableLongStateOf(vault.lastSyncTime()) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
 
     // Each operation refreshes the short-lived JWT and stores rotated refresh credentials.
     suspend fun currentSession(): CloudSession = withContext(Dispatchers.IO) {
-        val token = vault.refreshToken() ?: kotlin.error("Sign in to access private cloud backups.")
-        val newSession = SupabaseCloud(settings).refresh(token)
-        vault.saveSession(newSession)
-        newSession
+        CloudAuth.refresh(vault, settings)
     }
 
     fun startWork(task: suspend () -> String) {
@@ -63,9 +66,9 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
         Text("PRIVATE CLOUD", color = MaterialTheme.colorScheme.primary,
             fontSize = 12.sp, fontWeight = FontWeight.Bold)
         Text("RouteRevive cloud backups", fontSize = 21.sp, fontWeight = FontWeight.Bold)
-        Text("Optional, end-to-end password-encrypted snapshots. Your customer data and " +
-            "photos stay on this phone until YOU upload an encrypted archive. " +
-            "This is not automatic live sync or a shared team account.",
+        Text("Password-encrypted snapshots with optional background backup. Cloud changes " +
+            "can be imported safely between your own devices after confirmation. " +
+            "This is not real-time merging or a shared team account.",
             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
 
         if (!settings.valid()) {
@@ -83,7 +86,9 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
                 val candidate = CloudSettings(projectUrl, publicKey)
                 Button(enabled = !busy && candidate.valid(), onClick = {
                     runCatching {
+                        CloudBackupScheduler.stop(context)
                         vault.saveSettings(candidate)
+                        autoEnabled = false
                         settings = vault.settings()
                         session = null
                         signedInUid = ""
@@ -100,7 +105,9 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
                     fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
                 if (!busy) TextButton(onClick = {
                     // Clear local sign-in when changing projects. No data is deleted.
+                    CloudBackupScheduler.stop(context)
                     runCatching { vault.signOut() }
+                    autoEnabled = false
                     settings = CloudSettings("", "")
                     session = null
                     signedInUid = ""
@@ -179,6 +186,8 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
                         }, modifier = Modifier.weight(1f)) { Text("Check login") }
                         TextButton(enabled = !busy, onClick = {
                             runCatching { vault.signOut() }
+                            CloudBackupScheduler.stop(context)
+                            autoEnabled = false
                             session = null
                             signedInUid = ""
                             backups = emptyList()
@@ -226,6 +235,89 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
                             archivePassword = ""
                             selectedRestore = snapshot
                         }) { Text("Restore this snapshot") }
+                    }
+                }
+
+                CloudPanel("4. Automatic backups & device synchronization") {
+                    Text("Opt in to a daily or weekly encrypted backup. The separate backup " +
+                        "password is kept using Android Keystore on THIS device. " +
+                        "Use the same password on your other device to import snapshots. " +
+                        "Only changed data is uploaded; nothing is imported in the background.",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+                    if (!autoEnabled) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilterChip(selected = chosenHours == 24L,
+                                onClick = { chosenHours = 24L },
+                                label = { Text("Daily") })
+                            FilterChip(selected = chosenHours == 168L,
+                                onClick = { chosenHours = 168L },
+                                label = { Text("Weekly") })
+                        }
+                        OutlinedTextField(value = automaticPassword,
+                            onValueChange = { automaticPassword = it.take(200) },
+                            label = { Text("Shared backup password (10+ characters)") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            singleLine = true, modifier = Modifier.fillMaxWidth())
+                        Button(enabled = !busy && automaticPassword.length >= 10,
+                            modifier = Modifier.fillMaxWidth(), onClick = {
+                                val password = automaticPassword.toCharArray()
+                                automaticPassword = ""
+                                startWork {
+                                    try {
+                                        withContext(Dispatchers.IO) {
+                                            vault.enableAutomatic(password, chosenHours)
+                                            CloudBackupScheduler.schedule(context, chosenHours)
+                                        }
+                                        autoEnabled = true
+                                        "Automatic backup enabled. It will run when network " +
+                                            "access and Android background scheduling allow."
+                                    } finally { password.fill(0.toChar()) }
+                                }
+                            }) { Text("Enable encrypted automatic backups") }
+                        Text("Only enable on your other device after signing into the SAME cloud " +
+                            "account. If that device already has records, review conflicts first.",
+                            fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
+                    } else {
+                        Text("Enabled: " + if (vault.autoHours() == 168L) "Weekly" else "Daily",
+                            fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                        Button(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = {
+                            startWork {
+                                val result = withContext(Dispatchers.IO) {
+                                    CloudSyncEngine.syncOnce(context, store, vault).also {
+                                        vault.recordSyncStatus(it.message)
+                                    }
+                                }
+                                syncStatus = vault.lastSyncStatus()
+                                syncTime = vault.lastSyncTime()
+                                if (result.choice == CloudSyncChoice.DOWNLOAD)
+                                    pendingSync = result.remoteName
+                                result.message
+                            }
+                        }) { Text("Check & sync now") }
+                        OutlinedButton(enabled = !busy, modifier = Modifier.fillMaxWidth(), onClick = {
+                            syncStatus = vault.lastSyncStatus()
+                            syncTime = vault.lastSyncTime()
+                        }) { Text("Refresh sync status") }
+                        TextButton(enabled = !busy, onClick = {
+                            runCatching {
+                                CloudBackupScheduler.stop(context)
+                                vault.disableAutomatic()
+                                autoEnabled = false
+                                automaticPassword = ""
+                                message = "Automatic backups stopped. Cloud archives were not deleted."
+                            }.onFailure { error = it.message ?: "Could not stop automatic backups." }
+                        }) { Text("Disable automatic backups") }
+                        if (syncStatus.isNotBlank())
+                            Text(syncStatus, fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.secondary)
+                        if (syncTime > 0L)
+                            Text("Last successful sync: " +
+                                java.time.Instant.ofEpochMilli(syncTime).toString(),
+                                fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
+                        Text("If both devices changed records, syncing pauses. Keep both local " +
+                            "copies and use the manual snapshot restore only if you intend to " +
+                            "replace one device's records. This is not simultaneous editing.",
+                            fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
                     }
                 }
             }
@@ -288,6 +380,34 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
             TextButton(onClick = { showUpload = false; archivePassword = "" }) { Text("Cancel") }
         })
 
+    pendingSync?.let { expected ->
+        AlertDialog(onDismissRequest = { if (!busy) pendingSync = null },
+            title = { Text("Import newer cloud data?") },
+            text = {
+                Text("This replaces ALL local customers, jobs, photos, payments, requests, " +
+                    "appointments and settings on this phone with the latest encrypted snapshot. " +
+                    "Only proceed if you have NOT made separate local changes. " +
+                    "Create a local backup first if you're unsure.")
+            },
+            confirmButton = {
+                TextButton(enabled = !busy, onClick = {
+                    pendingSync = null
+                    startWork {
+                        withContext(Dispatchers.IO) {
+                            CloudSyncEngine.receive(context, store, vault, expected)
+                        }
+                        onRestoreComplete()
+                        syncStatus = vault.lastSyncStatus()
+                        syncTime = vault.lastSyncTime()
+                        "Latest encrypted snapshot imported. Local screens were refreshed."
+                    }
+                }) { Text("Import cloud snapshot") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingSync = null }) { Text("Keep local records") }
+            })
+    }
+
     selectedRestore?.let { backup ->
         AlertDialog(onDismissRequest = {
             if (!busy) { selectedRestore = null; archivePassword = "" }
@@ -323,8 +443,9 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
                                     BackupArchive.restore(context, store, password, it)
                                 }
                             }
+                            withContext(Dispatchers.IO) { vault.clearSyncBaseline() }
                             onRestoreComplete()
-                            "Encrypted cloud snapshot restored. Check your customers, jobs and photos."
+                            "Encrypted cloud snapshot restored. Automatic sync will require review."
                         } finally {
                             password.fill(0.toChar())
                             file.delete()
