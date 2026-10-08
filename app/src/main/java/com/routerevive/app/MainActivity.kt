@@ -115,7 +115,23 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
     }
     fun updateCustomer(c: Customer) {
         val index = customers.indexOfFirst { it.id == c.id }
-        if (index >= 0) { customers[index] = c; save() }
+        if (index >= 0) {
+            val previous = customers[index]
+            customers[index] = c
+            if (previous.phone != c.phone || previous.name != c.name ||
+                previous.consent != c.consent || previous.consentEvidence != c.consentEvidence ||
+                previous.optedOut != c.optedOut) {
+                campaigns.indices.forEach { campaignIndex ->
+                    val campaign = campaigns[campaignIndex]
+                    campaigns[campaignIndex] = campaign.copy(recipients = campaign.recipients.map { r ->
+                        if (r.customerId == c.id && r.status == "APPROVED") {
+                            r.copy(status = "DRAFT", approvedAt = "", message = CampaignRules.message(c, campaign))
+                        } else r
+                    })
+                }
+            }
+            save()
+        }
     }
     fun updateCampaign(c: Campaign) {
         val index = campaigns.indexOfFirst { it.id == c.id }
@@ -185,15 +201,33 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
             when (page) {
                 "home" -> HomeScreen(customers, campaigns,
                     onCustomers = { page = "customers" }, onCampaigns = { page = "campaigns" },
-                    onNew = { page = "new_campaign" })
+                    onNew = { page = "new_campaign" },
+                    onExport = { exportLauncher.launch("RouteRevive-backup-${LocalDate.now()}.json") },
+                    onImport = { importLauncher.launch(arrayOf("application/json", "text/plain")) },
+                    backupMessage = lastBackupMessage)
                 "customers" -> CustomerScreen(customers.toList(),
                     onAdd = { page = "new_customer" },
+                    onEdit = { editingCustomerId = it; page = "edit_customer" },
                     onOptOut = { id -> customers.firstOrNull { it.id == id }?.let { updateCustomer(it.copy(optedOut = true)) } },
                     onIssue = { id -> customers.firstOrNull { it.id == id }?.let { updateCustomer(it.copy(issueOpen = !it.issueOpen)) } },
                     onBooking = { id -> customers.firstOrNull { it.id == id }?.let { updateCustomer(it.copy(futureBooked = !it.futureBooked)) } })
                 "new_customer" -> NewCustomerScreen(onSave = {
                     customers.add(it); save(); page = "customers"
                 })
+                "edit_customer" -> customers.firstOrNull { it.id == editingCustomerId }?.let { customer ->
+                    CustomerEditor(customer, onSave = {
+                        updateCustomer(it); page = "customers"
+                    }, onCancel = { page = "customers" })
+                }
+                "schedule" -> ScheduleScreen(customers.toList(), appointments.toList(),
+                    onNew = { appointment ->
+                        if (!ScheduleRules.overlaps(appointment, appointments.toList())) {
+                            appointments.add(appointment); save()
+                        } else appError = "Time slot overlaps another booking."
+                    }, onStatus = { a, status ->
+                        val i = appointments.indexOfFirst { it.id == a.id }
+                        if (i >= 0) { appointments[i] = a.copy(status = status); save() }
+                    })
                 "campaigns" -> CampaignScreen(campaigns.toList(),
                     onNew = { page = "new_campaign" },
                     onSelect = { selectedId = it; page = "campaign_detail" })
@@ -228,11 +262,21 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                             customers.firstOrNull { it.id == r.customerId }?.let { updateCustomer(it.copy(optedOut = true)) }
                         }
                         updateRecipient(current, r.copy(status = status))
+                        if (status == "CANCELLED") {
+                            appointments.indices.forEach { index ->
+                                val a = appointments[index]
+                                if (a.campaignId == current.id && a.customerId == r.customerId &&
+                                    a.status == "SCHEDULED") appointments[index] = a.copy(status = "CANCELLED")
+                            }
+                            save()
+                        }
                     },
                     onMoney = { r, mode ->
                         moneyDialog = r.customerId to mode
                         moneyInput = if (mode == "book") String.format(Locale.US, "%.2f", current.price)
                         else String.format(Locale.US, "%.2f", r.bookedAmount)
+                        bookingTime = "09:00"
+                        bookingDuration = "60"
                     }
                 )
             }
