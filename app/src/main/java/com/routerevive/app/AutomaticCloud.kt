@@ -47,6 +47,55 @@ object CloudSyncEngine {
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
+    /** All delete operations share the sync lock; no foreground cleanup races with a local upload. */
+    fun deleteOldSnapshot(vault: CloudVault, expectedName: String): Unit =
+        synchronized(lock) {
+            require(CloudRules.validName(expectedName)) { "Invalid cloud backup name." }
+            val settings = vault.settings()
+            require(settings.valid()) { "Configure your private cloud account first." }
+            val session = CloudAuth.refresh(vault, settings)
+            val cloud = SupabaseCloud(settings)
+            val all = cloud.allBackups(session)
+            check(CloudRetentionRules.mayDelete(all, expectedName, vault.syncBaseline()?.first)) {
+                "This snapshot is protected (latest, sync baseline, or last remaining backup). " +
+                    "Only older snapshots can be deleted."
+            }
+            cloud.delete(session, expectedName)
+        }
+
+    fun cleanupNow(vault: CloudVault): Int = synchronized(lock) {
+        require(vault.automaticEnabled()) { "Enable automatic backups to use retention." }
+        val keep = vault.retentionKeep()
+        require(keep > 0) { "Turn on a retention limit first." }
+        val session = CloudAuth.refresh(vault, vault.settings())
+        prune(SupabaseCloud(vault.settings()), session, vault)
+    }
+
+    private fun prune(cloud: SupabaseCloud, session: CloudSession, vault: CloudVault): Int {
+        val keep = vault.retentionKeep()
+        if (keep == 0) return 0
+        val all = cloud.allBackups(session)
+        val candidates = CloudRetentionRules.automaticPrune(all, keep, vault.syncBaseline()?.first)
+        // Per-file REST calls are slower but preserve a clear failure boundary.
+        candidates.forEach { cloud.delete(session, it.name) }
+        return candidates.size
+    }
+
+    private fun retentionResult(
+        cloud: SupabaseCloud, session: CloudSession, vault: CloudVault,
+        choice: CloudSyncChoice, message: String, remote: String?
+    ): CloudSyncOutcome {
+        if (vault.retentionKeep() == 0) return CloudSyncOutcome(choice, message, remote)
+        return try {
+            val pruned = prune(cloud, session, vault)
+            CloudSyncOutcome(choice, message +
+                (if (pruned > 0) " Removed $pruned older automatic backup(s)." else ""), remote)
+        } catch (e: Exception) {
+            CloudSyncOutcome(choice, message + " Cleanup needs attention: " +
+                (e.message ?: "Check cloud storage permissions."), remote)
+        }
+    }
+
     fun syncOnce(context: Context, store: LocalStore, vault: CloudVault): CloudSyncOutcome =
         synchronized(lock) {
             require(vault.automaticEnabled()) { "Enable automatic backups first." }
@@ -61,7 +110,8 @@ object CloudSyncEngine {
                 val local = fingerprint(store)
                 val choice = CloudSyncRules.decide(remote, local, vault.syncBaseline())
                 when (choice) {
-                    CloudSyncChoice.CURRENT -> CloudSyncOutcome(choice, "Device is up to date.", remote)
+                    CloudSyncChoice.CURRENT -> retentionResult(
+                        cloud, signed, vault, choice, "Device is up to date.", remote)
                     CloudSyncChoice.DOWNLOAD -> CloudSyncOutcome(choice,
                         "Newer encrypted cloud data is available. Open Cloud and confirm import.", remote)
                     CloudSyncChoice.CONFLICT -> CloudSyncOutcome(choice,
@@ -81,7 +131,8 @@ object CloudSyncEngine {
                             val newName = CloudRules.newName(automatic = true)
                             cloud.upload(signed, file, newName)
                             vault.recordSynced(newName, local)
-                            CloudSyncOutcome(choice, "Encrypted cloud backup uploaded successfully.", newName)
+                            retentionResult(cloud, signed, vault, choice,
+                                "Encrypted cloud backup uploaded successfully.", newName)
                         } finally { file.delete() }
                     }
                 }
