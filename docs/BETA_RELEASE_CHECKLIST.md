@@ -2,6 +2,18 @@
 
 **Status:** internal/beta candidate only. Passing a build does not mean Google Play has approved this application.
 
+## Optional cloud gate (v0.2.0)
+
+- [ ] Create a dedicated Supabase project with verified email delivery.
+- [ ] Execute docs/SUPABASE_SETUP.md Storage SQL. Confirm PRIVATE bucket and user UUID folder RLS.
+- [ ] Test email signup, confirmation, sign-in, session refresh and sign-out.
+- [ ] Verify only PUBLIC anon/publishable key is entered. Never use a secret/service_role key.
+- [ ] Upload a password-encrypted archive, list it, restore on a second test phone.
+- [ ] Try a wrong backup password, expired session, disconnected network, wrong project, and failed storage permissions.
+- [ ] Ensure cloud restore warning appears and unrelated local records are not silently overwritten.
+- [ ] Document cloud account/metadata processing in privacy policy and Play Data safety forms.
+- [ ] Decide cloud archive retention, deletion and storage costs. Snapshots are immutable in v0.2.0.
+
 ## Build/distribution
 
 - [x] Keep Android application ID \`com.routerevive.app\`, stable signing keystore and increment versionCode to 10.
