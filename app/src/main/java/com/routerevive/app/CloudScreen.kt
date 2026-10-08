@@ -249,11 +249,11 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
                                 archivePassword = ""
                                 selectedRestore = snapshot
                             }) { Text("Restore") }
-                            val protected = snapshot.name == backups.firstOrNull()?.name ||
+                            val protectedSnapshot = snapshot.name == backups.firstOrNull()?.name ||
                                 snapshot.name == backups.firstOrNull {
                                     CloudRules.isAutomaticName(it.name)
                                 }?.name || snapshot.name == vault.syncBaseline()?.first
-                            if (!protected) TextButton(enabled = !busy,
+                            if (!protectedSnapshot) TextButton(enabled = !busy,
                                 onClick = { pendingDelete = snapshot }) {
                                 Text("Delete", color = MaterialTheme.colorScheme.error)
                             } else Text("Protected", fontSize = 11.sp,
