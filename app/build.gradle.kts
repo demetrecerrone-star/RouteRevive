@@ -6,14 +6,14 @@ plugins {
 
 android {
     namespace = "com.routerevive.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.routerevive.app"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 9
-        versionName = "0.0.9"
+        targetSdk = 36
+        versionCode = 10
+        versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     val signedStorePath = System.getenv("RR_SIGNING_FILE")
@@ -56,6 +56,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("org.osmdroid:osmdroid-android:6.1.20")
     implementation("androidx.core:core-ktx:1.15.0")
+    testImplementation("org.json:json:20240303")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
 }
