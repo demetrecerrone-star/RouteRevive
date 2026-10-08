@@ -6,6 +6,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import androidx.core.content.FileProvider
@@ -71,7 +73,8 @@ object JobMedia {
 object JobPdf {
     private fun usd(v: Double) = "$" + String.format(Locale.US, "%,.2f", v)
     fun write(out: OutputStream, job: JobRecord, customer: Customer,
-              appointment: Appointment, invoice: Boolean) {
+              appointment: Appointment, invoice: Boolean,
+              business: BusinessProfile = BusinessProfile(), context: Context? = null) {
         val pdf = PdfDocument()
         val ink = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(20, 35, 52) }
         var number = 0
@@ -93,7 +96,19 @@ object JobPdf {
         fun section() { y += 10f }
         try {
             newPage()
-            line(job.businessName.ifBlank { "RouteRevive Service" }, 22f, true)
+            if (context != null && business.logoFile.isNotBlank()) {
+                JobMedia.bitmap(context, business.logoFile)?.let { bitmap ->
+                    try {
+                        page!!.canvas.drawBitmap(bitmap, Rect(0, 0, bitmap.width, bitmap.height),
+                            RectF(455f, 25f, 555f, 92f), null)
+                    } finally { bitmap.recycle() }
+                }
+            }
+            line(job.businessName.ifBlank { business.name.ifBlank { "RouteRevive Service" } }, 22f, true)
+            if (business.address.isNotBlank()) line(business.address.take(75), 10f)
+            if (business.phone.isNotBlank()) line("Phone: " + business.phone, 10f)
+            if (business.email.isNotBlank()) line("Email: " + business.email, 10f)
+            if (business.website.isNotBlank()) line("Website: " + business.website, 10f)
             line(if (invoice) "INVOICE" else "ESTIMATE", 18f, true)
             line("Reference: " + job.invoiceNumber.ifBlank { job.id.take(12) })
             line("Created: " + LocalDate.now())
@@ -130,6 +145,10 @@ object JobPdf {
                 }
             } else line("Estimate only. Confirm before booking or payment.")
             section()
+            if (business.paymentTerms.isNotBlank()) {
+                line("PAYMENT TERMS", 12f, true)
+                business.paymentTerms.chunked(82).take(5).forEach { line(it, 10f) }
+            }
             line("Prepared locally using RouteRevive.", 10f)
             line("No payment has been processed by this app.", 10f)
             pdf.finishPage(page!!)
@@ -139,11 +158,12 @@ object JobPdf {
     }
 
     fun share(context: Context, job: JobRecord, customer: Customer,
-              appointment: Appointment, invoice: Boolean) {
+              appointment: Appointment, invoice: Boolean,
+              business: BusinessProfile = BusinessProfile()) {
         val folder = File(context.cacheDir, "job_pdfs").also { it.mkdirs() }
         val file = File(folder, (if (invoice) "Invoice-" else "Estimate-") +
             job.id.filter { it.isLetterOrDigit() }.take(20) + ".pdf")
-        file.outputStream().use { write(it, job, customer, appointment, invoice) }
+        file.outputStream().use { write(it, job, customer, appointment, invoice, business, context) }
         val uri = FileProvider.getUriForFile(context,
             context.packageName + ".fileprovider", file)
         val intent = Intent(Intent.ACTION_SEND).apply {
