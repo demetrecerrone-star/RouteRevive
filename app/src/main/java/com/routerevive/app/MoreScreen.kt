@@ -19,12 +19,15 @@ fun MoreScreen(
     onMap: () -> Unit, onRequests: () -> Unit,
     onCampaigns: () -> Unit, onBusiness: () -> Unit,
     onBookingPage: () -> Unit,
-    onBeta: () -> Unit
+    onBeta: () -> Unit,
+    onCloud: () -> Unit
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("YOUR BUSINESS TOOLS", color = MaterialTheme.colorScheme.primary,
             fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        MoreEntry("Private cloud backups", "Business sign-in and password-encrypted cross-device snapshots",
+            onClick = onCloud)
         MoreEntry("Beta readiness & privacy", "Local data health, release checklist and privacy details",
             onClick = onBeta)
         MoreEntry("Neighborhood map", "Customer pins and smart route suggestions",
@@ -38,8 +41,8 @@ fun MoreScreen(
         MoreEntry("Business & finances", "Your logo, billing, reports and CSV import",
             onClick = onBusiness)
         HorizontalDivider()
-        Text("Future business accounts", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        Text("This installation has a locally stored workspace identifier. It will help with a future account migration, but there is NO online account, team login, or cloud sync yet.",
+        Text("Cloud & local data", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text("Supabase cloud backup is optional. Connect your own project to use private account sign-in and manually upload encrypted archives. No automatic two-way sync, team roles, or live booking server yet.",
             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
         Text("Workspace: " + business.workspaceId.take(12),
             color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
