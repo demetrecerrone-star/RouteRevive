@@ -24,6 +24,8 @@ data class Customer(
     val address: String = "",
     val notes: String = "",
     val consentDate: String = "",
+    val latitude: Double? = null,
+    val longitude: Double? = null,
     val demo: Boolean = false
 )
 
@@ -136,7 +138,10 @@ class LocalStore(context: Context) {
                     issueOpen = j.optBoolean("issueOpen"), futureBooked = j.optBoolean("futureBooked"),
                     lastContact = j.optString("lastContact"), lastPrice = j.optDouble("lastPrice"),
                     address = j.optString("address"), notes = j.optString("notes"),
-                    consentDate = j.optString("consentDate"), demo = j.optBoolean("demo")
+                    consentDate = j.optString("consentDate"),
+                    latitude = if (j.has("latitude") && !j.isNull("latitude")) j.getDouble("latitude") else null,
+                    longitude = if (j.has("longitude") && !j.isNull("longitude")) j.getDouble("longitude") else null,
+                    demo = j.optBoolean("demo")
                 )
             }.getOrNull()
         }
@@ -186,11 +191,11 @@ class LocalStore(context: Context) {
         }
     }
 
-    fun exportJson(): String = data().apply { put("schemaVersion", 2) }.toString(2)
+    fun exportJson(): String = data().apply { put("schemaVersion", 3) }.toString(2)
 
     fun importJson(payload: String) {
         val root = JSONObject(payload)
-        require(root.optInt("schemaVersion", 1) in 1..2) { "Unsupported backup version" }
+        require(root.optInt("schemaVersion", 1) in 1..3) { "Unsupported backup version" }
         require(root.optJSONArray("customers") != null && root.optJSONArray("campaigns") != null) {
             "Not a RouteRevive backup"
         }
@@ -224,6 +229,9 @@ class LocalStore(context: Context) {
                 put("futureBooked", c.futureBooked); put("lastContact", c.lastContact)
                 put("lastPrice", c.lastPrice); put("address", c.address)
                 put("notes", c.notes); put("consentDate", c.consentDate); put("demo", c.demo)
+                if (c.latitude != null && c.longitude != null) {
+                    put("latitude", c.latitude); put("longitude", c.longitude)
+                }
             })
         }
         val cps = JSONArray()
@@ -254,7 +262,7 @@ class LocalStore(context: Context) {
             })
         }
         // Single atomic preference update; v0.0.1 data remains readable on upgrade.
-        check(prefs.edit().putString("db", JSONObject().put("schemaVersion", 2)
+        check(prefs.edit().putString("db", JSONObject().put("schemaVersion", 3)
             .put("customers", cs).put("campaigns", cps).put("appointments", aps).toString()).commit()) {
             "Unable to save RouteRevive data"
         }
