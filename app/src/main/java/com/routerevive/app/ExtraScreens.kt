@@ -138,9 +138,14 @@ fun ScheduleScreen(
     customers: List<Customer>,
     appointments: List<Appointment>,
     onNew: (Appointment) -> Unit,
-    onStatus: (Appointment, String) -> Unit
+    onStatus: (Appointment, String) -> Unit,
+    onReschedule: (Appointment) -> Unit
 ) {
     var showNew by remember { mutableStateOf(false) }
+    var rescheduling by remember { mutableStateOf<Appointment?>(null) }
+    var newDate by remember { mutableStateOf("") }
+    var newTime by remember { mutableStateOf("") }
+    var newDuration by remember { mutableStateOf("") }
     var customerId by remember { mutableStateOf("") }
     var service by remember { mutableStateOf("") }
     var date by remember { mutableStateOf(LocalDate.now().plusDays(1).toString()) }
@@ -182,14 +187,54 @@ fun ScheduleScreen(
                         Text("${a.durationMinutes} minutes · $${"%.2f".format(a.price)} · ${a.status}",
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
                         if (a.notes.isNotBlank()) Text(a.notes, fontSize = 12.sp)
-                        if (a.status == "SCHEDULED") Row {
-                            TextButton(onClick = { onStatus(a, "COMPLETED") }) { Text("Completed") }
-                            TextButton(onClick = { onStatus(a, "CANCELLED") }) { Text("Cancel") }
+                        if (a.status in setOf("SCHEDULED", "IN_PROGRESS")) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                if (a.status == "SCHEDULED") {
+                                    TextButton(onClick = { onStatus(a, "IN_PROGRESS") }) { Text("Start") }
+                                }
+                                TextButton(onClick = { onStatus(a, "COMPLETED") }) { Text("Complete") }
+                                TextButton(onClick = { onStatus(a, "CANCELLED") }) { Text("Cancel") }
+                            }
+                            if (a.status == "SCHEDULED") {
+                                TextButton(onClick = {
+                                    rescheduling = a
+                                    newDate = a.date
+                                    newTime = a.time
+                                    newDuration = a.durationMinutes.toString()
+                                }) { Text("Reschedule") }
+                            }
                         }
                     }
                 }
             }
         }
+    }
+    val editing = rescheduling
+    if (editing != null) {
+        val revised = editing.copy(date = newDate, time = newTime,
+            durationMinutes = newDuration.toIntOrNull() ?: 0)
+        val validMove = ScheduleRules.validDate(newDate) &&
+            ScheduleRules.validTime(newTime) &&
+            (newDuration.toIntOrNull() ?: 0) in 15..480 &&
+            !ScheduleRules.overlaps(revised, appointments)
+        AlertDialog(onDismissRequest = { rescheduling = null },
+            title = { Text("Reschedule appointment") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Changing this booking does not automatically change the date of its original marketing campaign.",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+                    ExtraField("New date YYYY-MM-DD", newDate) { newDate = it }
+                    ExtraField("New time HH:mm", newTime) { newTime = it }
+                    ExtraField("Duration (minutes)", newDuration, KeyboardType.Number) { newDuration = it }
+                    if (!validMove) Text("Enter a valid date, time and duration with no other overlapping appointment.",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                }
+            },
+            confirmButton = { TextButton(enabled = validMove, onClick = {
+                onReschedule(revised)
+                rescheduling = null
+            }) { Text("Save booking") } },
+            dismissButton = { TextButton(onClick = { rescheduling = null }) { Text("Cancel") } })
     }
     if (showNew) {
         AlertDialog(onDismissRequest = { showNew = false }, title = { Text("New appointment") },
