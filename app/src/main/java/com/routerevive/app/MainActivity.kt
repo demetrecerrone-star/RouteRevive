@@ -318,7 +318,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
         Column(Modifier.fillMaxSize().padding(inner)) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
                 horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column {
+                Column(Modifier.weight(1f)) {
                     Text("ROUTEREVIVE", color = Highlight, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold,
                         letterSpacing = 2.sp)
                     Text(when (page) {
@@ -337,7 +337,8 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         "new_campaign" -> "New campaign"
                         "campaign_detail" -> current?.title ?: "Campaign"
                         else -> "RouteRevive"
-                    }, color = Color.White, fontSize = 21.sp, fontWeight = FontWeight.Bold)
+                    }, color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (page == "customers" || page == "campaigns") {
                     IconButton(onClick = { page = if (page == "customers") "new_customer" else "new_campaign" }) {
