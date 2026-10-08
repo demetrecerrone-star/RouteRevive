@@ -10,7 +10,8 @@ data class BusinessProfile(
     val address: String = "",
     val website: String = "",
     val paymentTerms: String = "",
-    val logoFile: String = ""
+    val logoFile: String = "",
+    val workspaceId: String = ""
 )
 
 data class FinancialSummary(
