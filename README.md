@@ -1,3 +1,21 @@
+# RouteRevive v0.0.9 — Booking Page & Navigation Polish
+
+## New in this update
+- **Five-tab navigation**: Overview, Customers, Schedule, Jobs, and More. Under More: Neighborhood Map, Requests, Campaigns, Business & Finances, and Booking Request Page. This keeps Schedule in one-tap reach and makes space for future business tools.
+- **Customer-facing request page**: More → Booking request page can generate and share a branded `RouteRevive-Booking-Request.html` file after a business name and valid phone or email are saved. The mobile-friendly HTML form collects name, phone, ZIP, requested service, preferred date/time, and details. When opened in a compatible browser, pressing the button launches the customer's own SMS or email app with a prefilled inquiry addressed to your business. The customer must **send** it, and the business must manually enter/confirm a request in RouteRevive. It is NOT a hosted public website, live calendar, backend-connected booking portal, payment processor, or automatic data intake. To make it publicly accessible, publish the file on an HTTPS website you control; the app itself does not host it. Some apps may not open HTML attachments.
+- **Appointment management improvements**: Today/Upcoming/All filters, counts, confirmation before completion or cancellation, prevention of rescheduling/creating appointments in the past, and existing conflict/midnight checks.
+- **Future account foundation**: generate and persist a local workspace UUID in the encrypted business profile. Included in encrypted full backups. This is for future migration and does **not** create online accounts, authentication, shared team permissions or cloud synchronization.
+- **Smaller screen polish**: top titles truncate appropriately; compact navigation avoids crowding the header.
+- Existing local customer, photo, payment, invoice, map, campaign, request and reminder data remains compatible. Encrypted backup schema version 7, older archives still import.
+
+## Safe update
+Signed Android application ID: `com.routerevive.app`, versionCode 9, versionName 0.0.9. Install the `RouteRevive-v0.0.9-signed` artifact's APK over v0.0.8 from [GitHub Actions](https://github.com/demetrecerrone-star/RouteRevive/actions/workflows/android.yml). **Do not uninstall**; local encryption keys are destroyed by uninstalling. Back up with a password first. Android unit tests must pass and build signing secrets must remain unchanged.
+
+## Security / product limitations
+Customers' typed details are only transferred when they explicitly hand the message to their SMS/email application. Do not assume any submitted request is confirmed or automatically imported. Android records remain Keystore-encrypted, with owner-approved manual SMS workflows; no hosted authentication service, public API, realtime availability, or automatic messaging has been implemented. The local workspace ID is NOT a security credential.
+
+---
+
 # RouteRevive v0.0.8 — Requests, Reminders & Clean Dashboard
 
 This release keeps all v0.0.7 customer records, encrypted backups, photos,
