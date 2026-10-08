@@ -205,6 +205,11 @@ class CloudVault(context: Context) {
         }
     }
 
+    fun recordChecked() {
+        check(prefs.edit().putLong("sync_success_at", System.currentTimeMillis())
+            .commit()) { "Could not record successful cloud check." }
+    }
+
     fun recordSyncStatus(status: String) {
         check(prefs.edit().putString("sync_status", status.take(180)).commit())
     }
