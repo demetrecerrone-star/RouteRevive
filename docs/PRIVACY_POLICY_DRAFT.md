@@ -19,7 +19,7 @@ Data can include customer name, phone, street address, ZIP, approximate mapped c
 
 The app keeps business/customer records inside its Android app-private data, encrypted using a device-managed Android Keystore key with AES-GCM. Before/after photos and the business logo are stored as app-private files, separate from that encrypted record store. These photos are not individually Keystore-encrypted; access depends on Android app sandbox protection and device security.
 
-There is no RouteRevive-operated cloud customer-account system, cross-device synchronization service, behavioral analytics SDK, or background message sending in this release. The app does not directly collect precise live device GPS location.
+Starting with v0.2.0, the app supports optional business login using a Supabase project the business owner configures. Supabase may process the account email, login metadata, refresh credentials and private Storage object metadata under that project and its privacy terms. The app can upload an **end-to-end password-encrypted full backup archive** (including customer records, financial data, and job photos) only when the owner explicitly chooses Upload. Supabase receives the encrypted archive, not plaintext customer records. Restoring a cloud snapshot is a deliberate user action that replaces the current local dataset after password verification. There is no automatic per-edit synchronization, shared team account or background SMS sending. RouteRevive does not include a behavioral analytics SDK. The app does not directly collect precise live device GPS location.
 
 ## External services and chosen actions
 
@@ -32,6 +32,11 @@ There is no RouteRevive-operated cloud customer-account system, cross-device syn
 - **Legacy backups:** Older optional JSON backups may contain customer information in *unencrypted plaintext*. Users should treat them as sensitive and delete insecure copies once safely migrated.
 
 **Before publishing:** Check the final app dependency list for all additional SDK traffic, technical identifiers, and any applicable disclosures; revise this section if needed.
+
+
+## Optional Supabase cloud account and backup
+
+Cloud is OFF until a business owner supplies their own Supabase project URL and public anon/publishable API key, creates an account and explicitly uploads an encrypted archive. Supabase Auth processes account email/password authentication and related logs; RouteRevive persists the refresh credential under a separate Android Keystore key and does not save the account password. Supabase private Storage holds encrypted archive bytes and object metadata under account-scoped Row Level Security policies. The owner can restore or sign out. Archive passwords are not saved or recoverable. Deleting Supabase account data, storage archives and related provider logs must be handled through the project administrator and provider according to legal responsibilities; merely uninstalling the Android app does not remove cloud storage. The project administrator must configure retention and deletion procedures and should not use a publicly accessible storage bucket.
 
 ## Marketing and appointments
 
