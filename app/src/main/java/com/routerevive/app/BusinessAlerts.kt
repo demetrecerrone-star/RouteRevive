@@ -123,6 +123,8 @@ object LocalAlertNotifications {
             PackageManager.PERMISSION_GRANTED) &&
             NotificationManagerCompat.from(context).areNotificationsEnabled()
 
+    // Permission and system notification settings are checked immediately below.
+    @android.annotation.SuppressLint("MissingPermission")
     fun notify(context: Context, summary: AlertSummary): Boolean {
         if (summary.isEmpty() || !canNotify(context)) return false
         val service = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
