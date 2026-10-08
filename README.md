@@ -1,3 +1,19 @@
+# RouteRevive v0.1.0 — Beta Readiness
+
+RouteRevive is a **local-first Android service-business organizer**, not a certified production release.
+
+**What's new in 0.1.0:** A private **More → Beta readiness & privacy** preflight checks records, appointments, financial amounts and missing photos; encrypted backup import validates before replacing any live records; photo restore prevents same-name collisions and rolls back newly copied files if import fails; the app tracks the most recent successful full backup date.
+
+The Android build now targets **API 36** (required for new standard Android Google Play submissions after August 31, 2026), with AGP 8.10.1, Gradle 8.11.1, unit tests and release lint. GitHub Actions builds a **signed APK** for direct Android testing and a **signed AAB** for Play Console internal/closed testing. Both are still beta candidates and must pass real-device tests.
+
+**Update:** Install the v0.1.0 signed APK directly over the previous v0.0.9 signed release. **Do not uninstall** or clear app data, because that destroys Android Keystore-encrypted local customer records. Export a full encrypted backup before updating.
+
+**Beta/Google Play preparation:** Read [beta release checklist](docs/BETA_RELEASE_CHECKLIST.md), [privacy policy draft (not published)](docs/PRIVACY_POLICY_DRAFT.md), and [Play listing draft](docs/PLAY_STORE_BETA_DRAFT.md). A public HTTPS privacy policy, verified developer contact, Play Data safety answers, and account-specific testing still require owner action. A working APK is not Google Play approval.
+
+**Limitations:** No live public booking URL, remote accounts, cloud sync, automated SMS, payment processing, or real-traffic route optimization. The app is not suitable for uncontrolled broad use with real customer data until security, privacy and compliance review has been completed.
+
+---
+
 # RouteRevive v0.0.9 — Booking Page & Navigation Polish
 
 ## New in this update
