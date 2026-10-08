@@ -96,6 +96,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
     var moneyInput by remember { mutableStateOf("") }
     var appError by remember { mutableStateOf("") }
     var lastBackupMessage by remember { mutableStateOf("") }
+    var lastFullBackup by remember { mutableStateOf(store.lastFullBackupDate()) }
     var backupAction by remember { mutableStateOf("") }
     var backupPassword by remember { mutableStateOf("") }
     var backupBusy by remember { mutableStateOf(false) }
@@ -116,7 +117,12 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                     }.also { chars.fill(0.toChar()) }
                 }
                 backupBusy = false
-                result.onSuccess { lastBackupMessage = "Encrypted photo-inclusive backup saved. Keep the password safe." }
+                result.onSuccess {
+                    runCatching { store.recordFullBackupCreated() }
+                        .onSuccess { lastFullBackup = store.lastFullBackupDate() }
+                    lastBackupMessage = "Encrypted photo-inclusive backup saved. Keep the password safe."
+                    appError = ""
+                }
                     .onFailure { appError = "Encrypted backup failed: " + it.message }
             }
         } else backupPassword = ""
@@ -308,7 +314,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                 NavigationBarItem(
                     selected = page == id || (id == "more" &&
                         page in setOf("map", "campaigns", "campaign_detail",
-                            "new_campaign", "requests", "business", "booking_page")),
+                            "new_campaign", "requests", "business", "booking_page", "beta")),
                     onClick = { page = id },
                     icon = { Icon(icon, contentDescription = title) }, label = { Text(title, fontSize = 11.sp) }
                 )
@@ -332,6 +338,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         "requests" -> "Booking requests"
                         "more" -> "More tools"
                         "booking_page" -> "Customer booking page"
+                        "beta" -> "Beta readiness & privacy"
                         "map" -> "Neighborhood map"
                         "campaigns" -> "Neighborhood campaigns"
                         "new_campaign" -> "New campaign"
@@ -377,7 +384,18 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                     onRequests = { page = "requests" },
                     onCampaigns = { page = "campaigns" },
                     onBusiness = { page = "business" },
-                    onBookingPage = { page = "booking_page" })
+                    onBookingPage = { page = "booking_page" },
+                    onBeta = { page = "beta" })
+                "beta" -> BetaReadinessScreen(
+                    customers = customers.toList(), appointments = appointments.toList(),
+                    jobs = jobs.toList(), requests = bookingRequests.toList(),
+                    campaigns = campaigns.toList(), business = business,
+                    appLocked = launchLock, lastFullBackup = lastFullBackup,
+                    onBusiness = { page = "business" },
+                    onSchedule = { page = "schedule" },
+                    onJobs = { page = "jobs" },
+                    onRequests = { page = "requests" },
+                    onBackup = { backupAction = "export"; backupPassword = "" })
                 "booking_page" -> BookingPageScreen(
                     profile = business, onBack = { page = "more" })
                 "requests" -> RequestsScreen(
