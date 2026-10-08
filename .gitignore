@@ -7,3 +7,10 @@ build/
 *.apk
 *.aab
 .DS_Store
+
+# Never commit APK signing credentials
+*.keystore
+*.jks
+*.p12
+*.pfx
+**/routerevive-release.*
