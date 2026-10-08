@@ -1,4 +1,27 @@
-# RouteRevive v0.0.6 — Jobs, Invoices & Custom Icon
+# RouteRevive v0.0.7 — Business Essentials
+
+New in v0.0.7:
+- **Encrypted local data**: on first upgrade, existing app-private JSON records are migrated to Android Keystore AES-256-GCM. The original database is not replaced until new ciphertext is verified. Uninstalling removes the key; a full backup is critical.
+- **Encrypted full backup/restore**: the Overview page exports password-protected `.rrb` archives containing JSON records, actual before/after JPGs, and saved business logo. Passwords require at least 10 characters. Archive format uses PBKDF2-HMAC-SHA256 with 210,000 iterations and AES-256-GCM authentication. Restore verifies the entire ciphertext before importing. Passwords cannot be recovered. Backup and photo limits apply.
+- **Business profile**: save name, contact details, address, web URL, payment terms and logo. PDFs use the company profile as default branding.
+- **Financial reporting**: invoiced totals, payments received, outstanding/overdue issued invoices, and current-month receipts. Campaign payment totals are displayed **separately** because they can duplicate job payments; never add them together.
+- **CSV preview/import**: accepts headered CSV containing `name,phone,zip`; optional `service,lastServiceDate,address,notes`. Preview rejects invalid rows and duplicates. Every imported customer has SMS promotional consent disabled; no marketing texts are sent automatically.
+- **Optional app launch lock**: use Android system PIN/password/pattern when starting the app, if your phone already has a secure lock. This option is in **Overview → Business essentials → Profile**. Lock is separate from encryption and currently applies to cold launch, not every app switch.
+- **Same signing certificate, same Android package** (`com.routerevive.app`), versionCode 7. Install directly over signed v0.0.6 without uninstalling.
+
+## Important privacy and release notes
+
+Old plaintext JSON exports can still be imported with the **Import older JSON** button, but do **not** contain original photo bytes. The new encrypted `.rrb` format is recommended. Exports are user-controlled documents; protect archive passwords and do not place them in shared drives or public repos. Temporary unencrypted ZIP data is generated only inside Android app-private cache and deleted after encryption/decryption.
+
+Photos are saved privately on the device; there is no cloud synchronization. A failed or incomplete image file will cause a full backup to fail instead of silently omitting photos. The restore validates file counts, size ceilings, names and all record references before replacing saved records. Retain your original backup until you confirm the restoration works.
+
+No live payment processing, tax calculations, compliance guarantees or fully automated customer SMS. Device-side launch locking is not a substitute for a secure Android device and physical access controls.
+
+Build from [GitHub Actions](https://github.com/demetrecerrone-star/RouteRevive/actions/workflows/android.yml): select artifact `RouteRevive-v0.0.7-signed` and install `app-release.apk` over the installed release. JDK17, Gradle8.10.2, Android SDK35.
+
+---
+
+# Previous release: RouteRevive v0.0.6 — Jobs, Invoices & Custom Icon
 
 RouteRevive now supports the full local service workflow from booking through customer record, job notes, work photos, PDF estimate/invoice and manual payment ledger.
 
