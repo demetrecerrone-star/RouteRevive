@@ -1,3 +1,17 @@
+# RouteRevive v0.2.0 — Optional private encrypted cloud backups
+
+New in v0.2.0: the app can connect to a Supabase project, create/sign in to a business account using email/password, remember its session using Android Keystore-encrypted refresh credentials, upload new password-encrypted full backups (with job photos) to a private RLS-protected cloud bucket, list recent snapshots, and restore a chosen snapshot on another phone.
+
+**This is intentionally MANUAL encrypted backup and restore, not live synchronization.** Uploads occur only after choosing a separate archive password and explicitly pressing Upload. Cloud restores require a destructive replace confirmation. Offline local use continues unchanged. There is no live public booking endpoint, staff sharing, concurrent multi-device merging, background automatic uploading, or payment integration.
+
+To connect it to a real cloud, the business must create its own Supabase project, run a secure private Storage bucket / user-UUID Row Level Security policy, and enter the **public** project URL + publishable/anon key in More → Private cloud backups. **Never enter a service_role or secret key.** Follow [Supabase setup instructions](docs/SUPABASE_SETUP.md) before using a cloud account. Until then, cloud features remain disconnected.
+
+**Installation:** v0.2.0 is the same Android app ID and stable signing certificate, with versionCode 11 and target SDK 36. Install the signed APK directly over signed v0.1.0 without uninstalling. Export a separate encrypted local backup first. GitHub Actions also builds a signed AAB for later Google Play testing; this is not an approved public release.
+
+**Privacy review:** The optional Supabase Auth service processes account emails and login metadata; Supabase Storage only receives the end-to-end encrypted backup archive. Update the public privacy policy/Data safety answers before uploading the next Play AAB. See [privacy draft](docs/PRIVACY_POLICY_DRAFT.md) and [beta release checklist](docs/BETA_RELEASE_CHECKLIST.md).
+
+---
+
 # RouteRevive v0.1.0 — Beta Readiness
 
 RouteRevive is a **local-first Android service-business organizer**, not a certified production release.
