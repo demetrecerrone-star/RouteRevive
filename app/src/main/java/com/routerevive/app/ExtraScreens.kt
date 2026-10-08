@@ -147,6 +147,8 @@ fun ScheduleScreen(
     onMarkReminded: (Appointment) -> Unit
 ) {
     var showNew by remember { mutableStateOf(false) }
+    var filter by remember { mutableStateOf("Upcoming") }
+    var statusChange by remember { mutableStateOf<Pair<Appointment, String>?>(null) }
     var rescheduling by remember { mutableStateOf<Appointment?>(null) }
     var newDate by remember { mutableStateOf("") }
     var newTime by remember { mutableStateOf("") }
@@ -165,21 +167,42 @@ fun ScheduleScreen(
         notes = notes)
     val valid = selected != null && service.isNotBlank() &&
         ScheduleRules.validDate(date) && ScheduleRules.validTime(time) &&
+        runCatching { !java.time.LocalDateTime.of(
+            LocalDate.parse(date), LocalTime.parse(time)
+        ).isBefore(java.time.LocalDateTime.now()) }.getOrDefault(false) &&
         (duration.toIntOrNull() ?: 0) in 15..480 && (price.toDoubleOrNull() ?: -1.0) >= 0.0 &&
         !ScheduleRules.overlaps(candidate, appointments)
+    val currentDate = LocalDate.now()
+    val visible = appointments.filter { a ->
+        when (filter) {
+            "Today" -> a.date == currentDate.toString()
+            "Upcoming" -> a.status in setOf("SCHEDULED", "IN_PROGRESS") &&
+                runCatching { !LocalDate.parse(a.date).isBefore(currentDate) }.getOrDefault(false)
+            else -> true
+        }
+    }
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically) {
             Text("Appointments", fontSize = 19.sp, fontWeight = FontWeight.Bold)
             Button(onClick = { showNew = true }) { Icon(Icons.Default.Add, null); Text(" New") }
         }
-        if (appointments.isEmpty()) {
-            Text("No appointments. Add one to start planning your service schedule.",
-                color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(vertical = 24.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            listOf("Today", "Upcoming", "All").forEach { option ->
+                FilterChip(selected = filter == option, onClick = { filter = option },
+                    label = { Text(option, fontSize = 12.sp) })
+            }
+        }
+        Text("${visible.size} shown · ${appointments.size} total",
+            fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+        if (visible.isEmpty()) {
+            Text(if (appointments.isEmpty()) "No appointments. Add your first job."
+                else "No appointments in this view. Choose All for history.",
+                color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(vertical = 15.dp))
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(vertical = 12.dp)) {
-            items(appointments.sortedWith(compareBy<Appointment> { it.date }.thenBy { it.time }),
+            items(visible.sortedWith(compareBy<Appointment> { it.date }.thenBy { it.time }),
                 key = { it.id }) { a ->
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(16.dp)) {
@@ -217,8 +240,8 @@ fun ScheduleScreen(
                                 if (a.status == "SCHEDULED") {
                                     TextButton(onClick = { onStatus(a, "IN_PROGRESS") }) { Text("Start") }
                                 }
-                                TextButton(onClick = { onStatus(a, "COMPLETED") }) { Text("Complete") }
-                                TextButton(onClick = { onStatus(a, "CANCELLED") }) { Text("Cancel") }
+                                TextButton(onClick = { statusChange = a to "COMPLETED" }) { Text("Complete") }
+                                TextButton(onClick = { statusChange = a to "CANCELLED" }) { Text("Cancel") }
                             }
                             if (a.status == "SCHEDULED") {
                                 TextButton(onClick = {
@@ -234,12 +257,30 @@ fun ScheduleScreen(
             }
         }
     }
+    statusChange?.let { (appointment, status) ->
+        AlertDialog(onDismissRequest = { statusChange = null },
+            title = { Text(if (status == "CANCELLED") "Cancel appointment?" else "Mark job complete?") },
+            text = {
+                Text((if (status == "CANCELLED") "This frees the appointment slot." else
+                    "This moves the job to completed history.") +
+                    " Customer: " +
+                    (customers.firstOrNull { it.id == appointment.customerId }?.name ?: "Unknown") +
+                    " · " + appointment.date + " at " + appointment.time)
+            },
+            confirmButton = { TextButton(onClick = {
+                onStatus(appointment, status); statusChange = null
+            }) { Text("Confirm") } },
+            dismissButton = { TextButton(onClick = { statusChange = null }) { Text("Keep booking") } })
+    }
     val editing = rescheduling
     if (editing != null) {
         val revised = editing.copy(date = newDate, time = newTime,
             durationMinutes = newDuration.toIntOrNull() ?: 0)
         val validMove = ScheduleRules.validDate(newDate) &&
             ScheduleRules.validTime(newTime) &&
+            runCatching { !java.time.LocalDateTime.of(
+                LocalDate.parse(newDate), LocalTime.parse(newTime)
+            ).isBefore(java.time.LocalDateTime.now()) }.getOrDefault(false) &&
             (newDuration.toIntOrNull() ?: 0) in 15..480 &&
             !ScheduleRules.overlaps(revised, appointments)
         AlertDialog(onDismissRequest = { rescheduling = null },
