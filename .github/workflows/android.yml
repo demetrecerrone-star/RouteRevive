@@ -49,6 +49,6 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: RouteRevive-v0.0.4-signed
+          name: RouteRevive-v0.0.5-signed
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
