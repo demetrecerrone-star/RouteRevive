@@ -33,6 +33,9 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
     var backups by remember { mutableStateOf<List<CloudBackupFile>>(emptyList()) }
     var archivePassword by remember { mutableStateOf("") }
     var selectedRestore by remember { mutableStateOf<CloudBackupFile?>(null) }
+    var pendingDelete by remember { mutableStateOf<CloudBackupFile?>(null) }
+    var cleanupConfirm by remember { mutableStateOf(false) }
+    var retentionKeep by remember { mutableIntStateOf(vault.retentionKeep()) }
     var showUpload by remember { mutableStateOf(false) }
     var autoEnabled by remember { mutableStateOf(vault.automaticEnabled()) }
     var chosenHours by remember { mutableLongStateOf(vault.autoHours().takeIf { it > 0 } ?: 24L) }
@@ -218,12 +221,19 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
                                 backups = withContext(Dispatchers.IO) {
                                     SupabaseCloud(settings).backups(result)
                                 }
-                                "Found " + backups.size + " cloud backup(s)."
+                                "Showing " + backups.size + " newest cloud backup(s)."
                             }
                         }) { Text("Refresh cloud backup history") }
 
                     if (backups.isEmpty()) Text("No backups loaded. Select Refresh to list your files.",
                         color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp)
+                    if (backups.isNotEmpty()) {
+                        Text("${backups.size} snapshots · " +
+                            "${backups.sumOf { it.size.coerceAtLeast(0L) } / (1024 * 1024)} MiB listed",
+                            fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                        Text("Newest 50 shown. Retention checks all archives before deletion.",
+                            fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
+                    }
                     backups.forEach { snapshot ->
                         HorizontalDivider()
                         Text(snapshot.name.removePrefix("backup-").take(15) + " UTC",
@@ -231,10 +241,25 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
                         Text("Size: " + snapshot.size / 1024 + " KB · Created: " +
                             snapshot.createdAt.take(19),
                             color = MaterialTheme.colorScheme.secondary, fontSize = 11.sp)
-                        OutlinedButton(enabled = !busy, onClick = {
-                            archivePassword = ""
-                            selectedRestore = snapshot
-                        }) { Text("Restore this snapshot") }
+                        Text(if (CloudRules.isAutomaticName(snapshot.name)) "Automatic snapshot"
+                            else "Manual snapshot", fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.secondary)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(enabled = !busy, onClick = {
+                                archivePassword = ""
+                                selectedRestore = snapshot
+                            }) { Text("Restore") }
+                            val protected = snapshot.name == backups.firstOrNull()?.name ||
+                                snapshot.name == backups.firstOrNull {
+                                    CloudRules.isAutomaticName(it.name)
+                                }?.name || snapshot.name == vault.syncBaseline()?.first
+                            if (!protected) TextButton(enabled = !busy,
+                                onClick = { pendingDelete = snapshot }) {
+                                Text("Delete", color = MaterialTheme.colorScheme.error)
+                            } else Text("Protected", fontSize = 11.sp,
+                                modifier = Modifier.padding(top = 14.dp),
+                                color = MaterialTheme.colorScheme.secondary)
+                        }
                     }
                 }
 
@@ -244,6 +269,14 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
                         "Use the same password on your other device to import snapshots. " +
                         "Only changed data is uploaded; nothing is imported in the background.",
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+                    val health = CloudHealthRules.evaluate(
+                        autoEnabled, syncStatus, syncTime, vault.autoHours())
+                    Text(health.title, fontWeight = FontWeight.Bold,
+                        color = if (health.state in listOf(CloudHealthState.ACTION_REQUIRED,
+                            CloudHealthState.STALE)) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.primary)
+                    Text(health.detail, fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.secondary)
                     if (!autoEnabled) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilterChip(selected = chosenHours == 24L,
