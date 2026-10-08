@@ -314,7 +314,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                 NavigationBarItem(
                     selected = page == id || (id == "more" &&
                         page in setOf("map", "campaigns", "campaign_detail",
-                            "new_campaign", "requests", "business", "booking_page", "beta")),
+                            "new_campaign", "requests", "business", "booking_page", "beta", "cloud")),
                     onClick = { page = id },
                     icon = { Icon(icon, contentDescription = title) }, label = { Text(title, fontSize = 11.sp) }
                 )
@@ -339,6 +339,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         "more" -> "More tools"
                         "booking_page" -> "Customer booking page"
                         "beta" -> "Beta readiness & privacy"
+                        "cloud" -> "Private cloud backups"
                         "map" -> "Neighborhood map"
                         "campaigns" -> "Neighborhood campaigns"
                         "new_campaign" -> "New campaign"
@@ -385,7 +386,18 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                     onCampaigns = { page = "campaigns" },
                     onBusiness = { page = "business" },
                     onBookingPage = { page = "booking_page" },
-                    onBeta = { page = "beta" })
+                    onBeta = { page = "beta" },
+                    onCloud = { page = "cloud" })
+                "cloud" -> CloudScreen(store = store, onRestoreComplete = {
+                    customers.clear(); customers.addAll(store.loadCustomers())
+                    campaigns.clear(); campaigns.addAll(store.loadCampaigns())
+                    appointments.clear(); appointments.addAll(store.loadAppointments())
+                    jobs.clear(); jobs.addAll(store.loadJobs())
+                    bookingRequests.clear(); bookingRequests.addAll(store.loadBookingRequests())
+                    business = store.loadBusinessProfile()
+                    appError = ""
+                    lastBackupMessage = "Cloud backup restored. Local data reloaded."
+                })
                 "beta" -> BetaReadinessScreen(
                     customers = customers.toList(), appointments = appointments.toList(),
                     jobs = jobs.toList(), requests = bookingRequests.toList(),
