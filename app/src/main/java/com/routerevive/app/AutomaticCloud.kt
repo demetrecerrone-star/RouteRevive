@@ -158,7 +158,7 @@ object CloudBackupScheduler {
 
     fun stop(context: Context) {
         val manager = WorkManager.getInstance(context.applicationContext)
-        manager.cancelUniquePeriodicWork(PERIODIC)
+        manager.cancelUniqueWork(PERIODIC)
         manager.cancelUniqueWork(IMMEDIATE)
     }
 }
