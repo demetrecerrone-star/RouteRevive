@@ -1,3 +1,50 @@
+# RouteRevive v0.0.8 — Requests, Reminders & Clean Dashboard
+
+This release keeps all v0.0.7 customer records, encrypted backups, photos,
+invoices, financial reporting, business profiles, maps, and route planning.
+
+## New features
+
+- **Responsive dashboard:** compact two-column quick actions, open request count,
+  upcoming jobs, invoice balances, and easy access to encrypted full backup/restore.
+  No large overflowing button stack.
+- **Local booking request inbox:** owner records inquiries from phone, text, email,
+  or in person. Review requests, mark contacted/declined, and explicitly confirm
+  into a real appointment. The app checks for a future date, time, valid duration,
+  and scheduling conflicts. Returning customer matching uses phone number; new
+  records have promotional SMS consent **disabled**. Request status and confirmed
+  appointment ID are saved together.
+- **Manual SMS appointment reminders:** from **Overview → Schedule**, tap
+  **Open SMS reminder draft** on a future scheduled appointment. The business
+  must review and send the text through their own SMS app. Opening the draft
+  does not mark it sent. Tap **I sent the reminder** only after actually sending;
+  this stores the date, preventing mistaken repeated reminders on the same day.
+  Opted-out customers, demo records, canceled jobs, invalid phone numbers, and
+  appointments more than 30 days away cannot receive reminder drafts.
+- **Schedule conflict hardening:** no bookings that cross midnight; preceding-day
+  overlapping bookings are accounted for.
+- Encrypted full backups automatically include booking requests and reminder history.
+  Old v0.0.7 encrypted archives and older JSON files remain readable.
+
+## Important limitations
+
+This is a **local owner-managed booking inbox**, not a hosted public booking site:
+customers cannot submit requests to the app online yet, and no background SMS
+reminders or automatic texts are sent. There is no live SMS delivery confirmation;
+the owner must manually record when a reminder was actually sent.
+Remember to comply with applicable messaging rules and customer contact preferences.
+
+## Updating Android
+
+Use the permanent signed `RouteRevive-v0.0.8-signed` artifact from
+[GitHub Actions](https://github.com/demetrecerrone-star/RouteRevive/actions/workflows/android.yml).
+Install `app-release.apk` directly over your existing **signed** v0.0.7. Do
+not uninstall; uninstalling erases locally encrypted data and its Keystore key.
+Export a full encrypted backup first as a precaution. Android application ID
+remains `com.routerevive.app`; versionCode is 8.
+
+---
+
 # RouteRevive v0.0.7 — Business Essentials
 
 New in v0.0.7:
