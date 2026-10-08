@@ -1,4 +1,4 @@
-# RouteRevive v0.2.0 — Optional private Supabase cloud backups
+# RouteRevive v0.2.1 — Private cloud backups and guarded device sync
 
 RouteRevive continues working offline without Supabase. Cloud backups cannot work until the business creates a Supabase project, adds a private Storage bucket, and configures the app.
 
@@ -53,7 +53,7 @@ The example bucket limits each archive to 50 MiB; this is compatible with typica
 
 ## 3. Use RouteRevive
 
-1. Install the same-signed v0.2.0 APK **over** v0.1.0; do not uninstall.
+1. Install the same-signed v0.2.1 APK **over** the existing app; do not uninstall.
 2. Navigate to More → Private cloud backups.
 3. Enter your project URL (https://PROJECT.supabase.co) and public publishable/anon key.
 4. Register with a business email and password, verify the email if asked, then sign in.
@@ -62,11 +62,15 @@ The example bucket limits each archive to 50 MiB; this is compatible with typica
 7. On another phone, connect to the same project, sign in to the same account, refresh history and choose a snapshot.
 8. **WARNING:** Restoring REPLACES all records on that phone, including customers, appointments, photos, jobs, payments, campaigns, requests and business profile. Unsynced local edits will be lost. Create a separate local encrypted backup first.
 
-Cloud archives are authenticated AES-256-GCM with PBKDF2-HMAC-SHA256 key derivation (the existing RRB7 format). The archive password is not saved by the app or Supabase and cannot be recovered. Supabase Auth manages account credentials, and RouteRevive stores only the refresh credential under an Android Keystore encryption key. Private Storage RLS uses the signed-in user's JWT.
+Cloud archives are authenticated AES-256-GCM with PBKDF2-HMAC-SHA256 key derivation (the existing RRB7 format). For MANUAL backups the archive password is not saved. If you explicitly enable automatic backups, your shared backup password is stored only on that Android device in Keystore-encrypted preferences; Supabase never receives it. The password cannot be recovered on a replacement phone. Supabase Auth manages account credentials, and RouteRevive stores only the refresh credential under an Android Keystore encryption key. Private Storage RLS uses the signed-in user's JWT.
 
 ### Important limitations
 
-This is **manual encrypted cloud backup and restore**, NOT automatic two-way sync, a multi-employee account, hosted public booking, or real-time appointment updates. There is no cloud version merging or automatic conflict resolution. The Android app never gets a service-role key.
+Manual encrypted backup/restore remains available. In v0.2.1 you may **opt in** to daily or weekly automatic encrypted snapshots, plus confirm importing newer snapshots onto another phone signed in to the same cloud account. The Android OS schedules background work when network service is available; exact times are not guaranteed. Only edited records trigger a new automatic snapshot. Automatic snapshots use the same existing bucket security policy and a reserved marker inside the original `backup-...rrb` filename format; **no SQL migration is required**.
+
+To set up a second device, install v0.2.1, connect to the same Supabase project, sign in to the SAME account, then choose a backup password **identical to the first phone's automatic backup password** under section 4 of the Cloud page. Press **Check & sync now**; if newer cloud data exists, review the warning and confirm **Import cloud snapshot**. Imported records replace local records on that device, including images. Export a separate local encrypted backup before importing.
+
+**This is not simultaneous multi-device live editing.** Incoming changes are NOT restored in the background. If both phones have changed data since their last common snapshot, syncing pauses rather than silently overwriting either copy. Manual snapshot restore remains a deliberate destructive recovery option, not an automatic merge. Keep only one device editing at a time and import latest changes on the other first. There is no shared team account, hosted public booking, or real-time appointment update system.
 
 Photos are included inside the encrypted archive, while Supabase Auth processes account/email metadata under your project's terms. Temporary encrypted files are deleted from app-private cache after transfers. Local editing remains available without network access.
 
@@ -77,6 +81,8 @@ Photos are included inside the encrypted archive, while Supabase Auth processes 
 - **413:** File exceeds bucket size or plan limit; reduce photo sizes or upgrade supported limits.
 - **Email verification:** Check inbox, spam and Supabase SMTP configuration.
 - **Wrong archive password:** Use the separate password from when that snapshot was uploaded.
-- **Two phones contain different data:** Choose carefully. This release does not automatically merge.
+- **Automatic backup pending:** Android may defer periodic tasks to save battery or wait for internet; use **Check & sync now** while online.
+- **Two phones contain different data:** The app refuses automatic conflict resolution. Save a separate export of BOTH phones; decide which complete snapshot to restore manually.
+- **Forgot the automatic backup password:** Existing snapshots cannot be decrypted without it. Disable automatic backup and carefully migrate or restore a known-good archive before re-enabling. Never lose the recovery password.
 
 References: https://supabase.com/docs/guides/auth | https://supabase.com/docs/guides/storage/buckets/fundamentals | https://supabase.com/docs/guides/storage/security/access-control
