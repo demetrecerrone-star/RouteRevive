@@ -178,17 +178,55 @@ object BackupArchive {
             require(referencedPhotos(payload) == received) {
                 "Photo files and record references do not match."
             }
-            // Stage photos into app-private storage first; failures cannot
-            // replace the active database. UUID filenames prevent path traversal.
+            // Validate before staging any photo into live app storage.
+            BackupValidator.check(payload)
+            // Never overwrite an existing photo with a different payload. A
+            // same-named collision could otherwise corrupt an unrelated job.
             for (name in received) {
-                val source = File(stage, name)
-                val dest = JobMedia.photoFile(context, name) ?: error("Bad file name")
-                if (!dest.exists()) {
-                    source.copyTo(dest)
+                val original = JobMedia.photoFile(context, name) ?: error("Bad photo filename")
+                val incoming = File(stage, name)
+                if (original.exists()) {
+                    require(original.length() == incoming.length() &&
+                        original.inputStream().use { first ->
+                            incoming.inputStream().use { second ->
+                                val a = ByteArray(8192)
+                                val b = ByteArray(8192)
+                                var equal = true
+                                while (true) {
+                                    val len = first.read(a)
+                                    val other = second.read(b)
+                                    if (len != other || (len >= 0 &&
+                                        !a.copyOf(len).contentEquals(b.copyOf(other)))) {
+                                        equal = false
+                                        break
+                                    }
+                                    if (len < 0) break
+                                }
+                                equal
+                            }
+                        }) {
+                        "A saved photo conflicts with a photo in this backup. " +
+                            "Restore on a fresh device or contact support; no records were replaced."
+                    }
                 }
             }
-            // importJson checks all entities and rolls back on validation failures.
-            store.importJson(payload)
+            val created = mutableListOf<File>()
+            try {
+                // Images are staged first because database records will refer
+                // to them, and any new images are removed if saving fails.
+                for (name in received) {
+                    val source = File(stage, name)
+                    val dest = JobMedia.photoFile(context, name) ?: error("Bad filename")
+                    if (!dest.exists()) {
+                        source.copyTo(dest)
+                        created.add(dest)
+                    }
+                }
+                store.importJson(payload)
+            } catch (e: Exception) {
+                created.forEach { it.delete() }
+                throw e
+            }
         } finally {
             zipFile.delete()
             stage.deleteRecursively()
