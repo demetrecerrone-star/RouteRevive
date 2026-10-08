@@ -33,6 +33,7 @@ fun JobsScreen(
     appointments: List<Appointment>,
     customers: List<Customer>,
     jobs: List<JobRecord>,
+    business: BusinessProfile,
     onSaveJob: (JobRecord) -> Unit,
     onOpenSchedule: () -> Unit
 ) {
@@ -43,7 +44,7 @@ fun JobsScreen(
         if (customer != null) {
             JobDetailScreen(appointment, customer,
                 jobs.firstOrNull { it.appointmentId == appointment.id },
-                onSaveJob, onClose = { selectedId = null })
+                business, onSaveJob, onClose = { selectedId = null })
             return
         }
     }
@@ -94,13 +95,14 @@ private fun JobDetailScreen(
     appointment: Appointment,
     customer: Customer,
     savedJob: JobRecord?,
+    business: BusinessProfile,
     onSaveJob: (JobRecord) -> Unit,
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
     val starter = remember(appointment.id) { JobMath.defaultFrom(appointment) }
     val job = savedJob ?: starter
-    var company by remember(job.id) { mutableStateOf(job.businessName) }
+    var company by remember(job.id) { mutableStateOf(job.businessName.ifBlank { business.name }) }
     var notes by remember(job.id) { mutableStateOf(job.serviceDetails) }
     var dueDate by remember(job.id) { mutableStateOf(job.dueDate) }
     var showLine by remember { mutableStateOf(false) }
@@ -244,7 +246,8 @@ private fun JobDetailScreen(
             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = {
-                runCatching { JobPdf.share(context, job, customer, appointment, false) }
+                runCatching { JobPdf.share(context, job.copy(businessName = company.trim(),
+                    serviceDetails = notes.trim(), dueDate = dueDate.trim()), customer, appointment, false, business) }
                     .onFailure { issue = "Estimate PDF failed: " + it.message }
             }) { Text("Share estimate PDF") }
         }
@@ -254,7 +257,7 @@ private fun JobDetailScreen(
                     businessName = company.trim(),
                     serviceDetails = notes.trim(), dueDate = dueDate.trim(),
                     invoiceIssued = true)
-                runCatching { JobPdf.share(context, ready, customer, appointment, true) }
+                runCatching { JobPdf.share(context, ready, customer, appointment, true, business) }
                     .onSuccess { onSaveJob(ready) }
                     .onFailure { issue = "Invoice PDF failed: " + it.message }
             } else issue = "Save valid details and add a service first."
