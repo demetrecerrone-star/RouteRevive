@@ -71,6 +71,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
     val customers = remember { mutableStateListOf<Customer>().apply { addAll(store.loadCustomers()) } }
     val campaigns = remember { mutableStateListOf<Campaign>().apply { addAll(store.loadCampaigns()) } }
     val appointments = remember { mutableStateListOf<Appointment>().apply { addAll(store.loadAppointments()) } }
+    val jobs = remember { mutableStateListOf<JobRecord>().apply { addAll(store.loadJobs()) } }
     val context = LocalContext.current
     var page by remember { mutableStateOf("home") }
     var selectedId by remember { mutableStateOf("") }
@@ -112,8 +113,21 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
     }
 
     fun save() {
-        try { store.save(customers.toList(), campaigns.toList(), appointments.toList()); appError = "" }
+        try { store.save(customers.toList(), campaigns.toList(), appointments.toList(), jobs.toList()); appError = "" }
         catch (e: Exception) { appError = "Unable to save changes: ${e.message}" }
+    }
+    fun updateJob(job: JobRecord) {
+        val appointment = appointments.firstOrNull { it.id == job.appointmentId }
+        if (appointment == null || appointment.customerId != job.customerId ||
+            job.lineItems.size > 20 || job.lineItems.any { !JobMath.validLineItem(it) } ||
+            job.photos.size > 16 || job.payments.any { it.amount <= 0 || !it.amount.isFinite() } ||
+            JobMath.paid(job) > JobMath.subtotal(job) + 0.001) {
+            appError = "Job details not saved: invalid amount or appointment."
+            return
+        }
+        val index = jobs.indexOfFirst { it.appointmentId == job.appointmentId }
+        if (index < 0) jobs.add(job) else jobs[index] = job
+        save()
     }
     fun updateCustomer(c: Customer) {
         val index = customers.indexOfFirst { it.id == c.id }
@@ -189,7 +203,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
         ).isEmpty() && !LocalDate.parse(campaign.expiryDate).isBefore(LocalDate.now())
 
     val current = campaigns.firstOrNull { it.id == selectedId }
-    BackHandler(page !in setOf("home", "customers", "campaigns", "schedule", "map")) {
+    BackHandler(page !in setOf("home", "customers", "campaigns", "schedule", "map", "jobs")) {
         page = when (page) {
             "campaign_detail", "new_campaign" -> "campaigns"
             else -> "customers"
@@ -200,7 +214,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
         NavigationBar(containerColor = Panel) {
             listOf(Triple("home", "Overview", Icons.Default.Home),
                 Triple("customers", "Customers", Icons.Default.People),
-                Triple("schedule", "Schedule", Icons.Default.DateRange),
+                Triple("jobs", "Jobs", Icons.Default.Build),
                 Triple("map", "Map", Icons.Default.Map),
                 Triple("campaigns", "Campaigns", Icons.Default.LocationOn)).forEach { (id, title, icon) ->
                 NavigationBarItem(
@@ -223,6 +237,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         "new_customer" -> "Add customer"
                         "edit_customer" -> "Edit customer"
                         "schedule" -> "Appointments"
+                        "jobs" -> "Jobs & invoices"
                         "map" -> "Neighborhood map"
                         "campaigns" -> "Neighborhood campaigns"
                         "new_campaign" -> "New campaign"
@@ -245,6 +260,8 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
             when (page) {
                 "home" -> HomeScreen(customers, campaigns,
                     onCustomers = { page = "customers" }, onCampaigns = { page = "campaigns" },
+                    onJobs = { page = "jobs" }, onSchedule = { page = "schedule" },
+                    jobs = jobs.toList(),
                     onNew = {
                         campaignZipFromMap = ""
                         campaignServiceFromMap = "House pressure washing"
@@ -283,6 +300,8 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                     onAppointmentStatus = { a, status -> updateAppointmentStatus(a, status) },
                     onOpenSchedule = { page = "schedule" }
                 )
+                "jobs" -> JobsScreen(appointments.toList(), customers.toList(), jobs.toList(),
+                    onSaveJob = { updateJob(it) }, onOpenSchedule = { page = "schedule" })
                 "schedule" -> ScheduleScreen(customers.toList(), appointments.toList(),
                     onNew = { appointment ->
                         if (!ScheduleRules.overlaps(appointment, appointments.toList())) {
@@ -451,7 +470,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
     if (importCandidate != null) {
         AlertDialog(onDismissRequest = { importCandidate = null },
             title = { Text("Replace local data from backup?") },
-            text = { Text("This will replace all customers, campaigns and appointments on this phone. The selected file must be a RouteRevive JSON backup. Store backups privately.") },
+            text = { Text("This replaces customers, campaigns, appointments and job records. Photo images are NOT included in JSON backups. The selected file must be a RouteRevive JSON backup. Store backups privately.") },
             confirmButton = {
                 TextButton(onClick = {
                     val content = importCandidate ?: ""
@@ -460,6 +479,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         customers.clear(); customers.addAll(store.loadCustomers())
                         campaigns.clear(); campaigns.addAll(store.loadCampaigns())
                         appointments.clear(); appointments.addAll(store.loadAppointments())
+                        jobs.clear(); jobs.addAll(store.loadJobs())
                     }.onSuccess { lastBackupMessage = "Backup imported successfully"; appError = "" }
                      .onFailure { appError = "Import rejected: ${it.message}" }
                     importCandidate = null
@@ -488,7 +508,9 @@ private fun Stat(label: String, value: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun HomeScreen(customers: List<Customer>, campaigns: List<Campaign>,
+                       jobs: List<JobRecord>,
                        onCustomers: () -> Unit, onCampaigns: () -> Unit, onNew: () -> Unit,
+                       onJobs: () -> Unit, onSchedule: () -> Unit,
                        onExport: () -> Unit, onImport: () -> Unit, backupMessage: String) {
     val paid = campaigns.sumOf { campaign -> campaign.recipients.sumOf { it.paidAmount } }
     val booked = campaigns.sumOf { CampaignRules.bookedSlots(it) }
@@ -506,7 +528,8 @@ private fun HomeScreen(customers: List<Customer>, campaigns: List<Campaign>,
             Stat("Customers", customers.size.toString(), Modifier.weight(1f))
             Stat("Booked jobs", booked.toString(), Modifier.weight(1f))
         }
-        Stat("Recorded collected revenue", usd(paid), Modifier.fillMaxWidth())
+        Stat("Campaign revenue recorded", usd(paid), Modifier.fillMaxWidth())
+        Stat("Payments received on job invoices", usd(jobs.sumOf { JobMath.paid(it) }), Modifier.fillMaxWidth())
         InfoCard {
             Text("Start here", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(Modifier.height(8.dp))
@@ -517,12 +540,14 @@ private fun HomeScreen(customers: List<Customer>, campaigns: List<Campaign>,
             Text("5. Track bookings and completed payments.")
             Spacer(Modifier.height(12.dp))
             OutlinedButton(onClick = onCustomers) { Text("Manage customers") }
+            OutlinedButton(onClick = onJobs) { Text("Open jobs & invoices") }
+            OutlinedButton(onClick = onSchedule) { Text("Manage appointment schedule") }
             TextButton(onClick = onCampaigns) { Text("View campaigns") }
         }
         InfoCard {
             Text("Back up your data", fontWeight = FontWeight.Bold, fontSize = 17.sp)
             Spacer(Modifier.height(6.dp))
-            Text("Export a local JSON backup before changing phones or uninstalling. The file contains customer phone numbers and other private information; store it securely.",
+            Text("Export a local JSON backup of customer, campaign, appointment, job and payment records. Photo image files are NOT included. Back up your job photos separately before changing phones or uninstalling. The JSON contains private information; store it securely.",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
             Row {
                 OutlinedButton(onClick = onExport) { Text("Export") }
@@ -531,7 +556,7 @@ private fun HomeScreen(customers: List<Customer>, campaigns: List<Campaign>,
             }
             if (backupMessage.isNotBlank()) Text(backupMessage, fontSize = 12.sp, color = Highlight)
         }
-        Text("V0.0.2 · Local-only MVP · No automatic texting, cloud sync or payments",
+        Text("V0.0.6 · Local-only MVP · No automatic texting, cloud sync or payment processing",
             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
     }
 }
