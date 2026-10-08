@@ -21,6 +21,12 @@ The app keeps business/customer records inside its Android app-private data, enc
 
 Starting with v0.2.0, the app supports optional business login using a Supabase project the business owner configures. Supabase may process the account email, login metadata, refresh credentials and private Storage object metadata under that project and its privacy terms. The app can upload an **end-to-end password-encrypted full backup archive** (including customer records, financial data, and job photos) when the owner chooses Upload, or on a daily/weekly schedule after separately enabling automatic encrypted backups. Supabase receives the encrypted archive, not plaintext customer records. Restoring a cloud snapshot is a deliberate user action that replaces the current local dataset after password verification. There is no automatic per-edit live synchronization, shared team account or background SMS sending. Automatic backups require opt-in and do not import other devices' data without confirmation. RouteRevive does not include a behavioral analytics SDK. The app does not directly collect precise live device GPS location.
 
+## Local analytics and opt-in notifications (v0.2.2)
+
+The business analytics screen aggregates locally entered job payments, invoice values, and customer/appointment counts directly on the owner's phone. These calculations are not sent to a third-party analytics provider; they may reflect sample/demo records if the owner has retained those records.
+
+The business owner can opt in to daily Android notifications summarizing today's/tomorrow's appointments, overdue invoice counts, and cloud backup problems. Notification permissions are requested when enabled on supported Android versions; categories can be turned off separately. Alerts are created by Android background tasks and may be delayed by OS scheduling and battery optimization. Notification text contains counts or backup status, not individual customer identities, contact details or invoice amounts. Notifications are for the business owner only; the app does not send automatic customer SMS or emails. Android may process notification metadata under its device/system policies.
+
 ## External services and chosen actions
 
 - **Map browsing:** OpenStreetMap-based map services provide visual map tiles, receiving the map area the user chooses to view and technical network data as required to serve tiles. Users should also review the map provider's terms and privacy practices.
