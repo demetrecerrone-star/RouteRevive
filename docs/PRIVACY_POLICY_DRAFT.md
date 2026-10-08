@@ -27,6 +27,10 @@ The business analytics screen aggregates locally entered job payments, invoice v
 
 The business owner can opt in to daily Android notifications summarizing today's/tomorrow's appointments, overdue invoice counts, and cloud backup problems. Notification permissions are requested when enabled on supported Android versions; categories can be turned off separately. Alerts are created by Android background tasks and may be delayed by OS scheduling and battery optimization. Notification text contains counts or backup status, not individual customer identities, contact details or invoice amounts. Notifications are for the business owner only; the app does not send automatic customer SMS or emails. Android may process notification metadata under its device/system policies.
 
+## Cloud archive deletion and retention (v0.2.4)
+
+Owners can explicitly and permanently delete older encrypted snapshots from their own private Supabase Storage folder. Optional automatic retention defaults to off. When enabled, the app may delete automatic snapshots older than the newest 10, 30 or 60 after successful cloud checks; manual archives are never automatically deleted. Supabase receives a signed account-scoped storage delete request, not decrypted backup contents. Another device may depend on an old snapshot, and removing it cannot be undone. Copies exported outside Supabase and service provider logs are not removed by deletion.
+
 ## External services and chosen actions
 
 - **Map browsing:** OpenStreetMap-based map services provide visual map tiles, receiving the map area the user chooses to view and technical network data as required to serve tiles. Users should also review the map provider's terms and privacy practices.
