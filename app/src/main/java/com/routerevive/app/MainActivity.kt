@@ -143,8 +143,43 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
         updateCampaign(c.copy(recipients = c.recipients.map { if (it.customerId == r.customerId) r else it }))
     }
     fun hasFutureAppointment(customerId: String): Boolean =
-        appointments.any { a -> a.customerId == customerId && a.status == "SCHEDULED" &&
+        appointments.any { a -> a.customerId == customerId && a.status in setOf("SCHEDULED", "IN_PROGRESS") &&
             runCatching { !LocalDate.parse(a.date).isBefore(LocalDate.now()) }.getOrDefault(false) }
+
+    fun updateAppointmentStatus(appointment: Appointment, status: String) {
+        val i = appointments.indexOfFirst { it.id == appointment.id }
+        if (i < 0) return
+        val currentAppointment = appointments[i]
+        if (currentAppointment.status !in setOf("SCHEDULED", "IN_PROGRESS")) return
+        if (status !in setOf("IN_PROGRESS", "COMPLETED", "CANCELLED")) return
+        if (status == "IN_PROGRESS" && currentAppointment.status != "SCHEDULED") return
+        appointments[i] = currentAppointment.copy(status = status)
+        if (currentAppointment.campaignId.isNotBlank() && status in setOf("COMPLETED", "CANCELLED")) {
+            val campaignIndex = campaigns.indexOfFirst { it.id == currentAppointment.campaignId }
+            if (campaignIndex >= 0) {
+                val campaign = campaigns[campaignIndex]
+                campaigns[campaignIndex] = campaign.copy(recipients = campaign.recipients.map { r ->
+                    if (r.customerId == currentAppointment.customerId && r.status == "BOOKED") {
+                        r.copy(status = status)
+                    } else r
+                })
+            }
+        }
+        save()
+    }
+
+    fun rescheduleAppointment(revised: Appointment) {
+        val i = appointments.indexOfFirst { it.id == revised.id }
+        if (i < 0 || appointments[i].status != "SCHEDULED" ||
+            !ScheduleRules.validDate(revised.date) || !ScheduleRules.validTime(revised.time) ||
+            revised.durationMinutes !in 15..480 ||
+            ScheduleRules.overlaps(revised, appointments.toList())) {
+            appError = "Could not reschedule: check the booking and time slot."
+            return
+        }
+        appointments[i] = revised
+        save()
+    }
 
     fun allowed(customer: Customer, campaign: Campaign): Boolean =
         CampaignRules.reasons(
@@ -244,32 +279,18 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         campaignZipFromMap = zip
                         campaignServiceFromMap = service
                         page = "new_campaign"
-                    }
+                    },
+                    onAppointmentStatus = { a, status -> updateAppointmentStatus(a, status) },
+                    onOpenSchedule = { page = "schedule" }
                 )
                 "schedule" -> ScheduleScreen(customers.toList(), appointments.toList(),
                     onNew = { appointment ->
                         if (!ScheduleRules.overlaps(appointment, appointments.toList())) {
                             appointments.add(appointment); save()
                         } else appError = "Time slot overlaps another booking."
-                    }, onStatus = { a, status ->
-                        val i = appointments.indexOfFirst { it.id == a.id }
-                        if (i >= 0) {
-                            appointments[i] = a.copy(status = status)
-                            if (a.campaignId.isNotBlank()) {
-                                val campaignIndex = campaigns.indexOfFirst { it.id == a.campaignId }
-                                if (campaignIndex >= 0) {
-                                    val campaign = campaigns[campaignIndex]
-                                    campaigns[campaignIndex] = campaign.copy(
-                                        recipients = campaign.recipients.map { r ->
-                                            if (r.customerId == a.customerId && r.status == "BOOKED") {
-                                                r.copy(status = if (status == "CANCELLED") "CANCELLED" else "COMPLETED")
-                                            } else r
-                                        })
-                                }
-                            }
-                            save()
-                        }
-                    })
+                    }, onStatus = { a, status -> updateAppointmentStatus(a, status) },
+                    onReschedule = { revised -> rescheduleAppointment(revised) })
+
                 "campaigns" -> CampaignScreen(campaigns.toList(),
                     onNew = {
                         campaignZipFromMap = ""
@@ -313,7 +334,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                             appointments.indices.forEach { index ->
                                 val a = appointments[index]
                                 if (a.campaignId == current.id && a.customerId == r.customerId &&
-                                    a.status == "SCHEDULED") appointments[index] = a.copy(status = "CANCELLED")
+                                    a.status in setOf("SCHEDULED", "IN_PROGRESS")) appointments[index] = a.copy(status = "CANCELLED")
                             }
                             save()
                         }
