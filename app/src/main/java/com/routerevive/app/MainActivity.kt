@@ -420,7 +420,8 @@ private fun Stat(label: String, value: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun HomeScreen(customers: List<Customer>, campaigns: List<Campaign>,
-                       onCustomers: () -> Unit, onCampaigns: () -> Unit, onNew: () -> Unit) {
+                       onCustomers: () -> Unit, onCampaigns: () -> Unit, onNew: () -> Unit,
+                       onExport: () -> Unit, onImport: () -> Unit, backupMessage: String) {
     val paid = campaigns.sumOf { campaign -> campaign.recipients.sumOf { it.paidAmount } }
     val booked = campaigns.sumOf { CampaignRules.bookedSlots(it) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -450,15 +451,34 @@ private fun HomeScreen(customers: List<Customer>, campaigns: List<Campaign>,
             OutlinedButton(onClick = onCustomers) { Text("Manage customers") }
             TextButton(onClick = onCampaigns) { Text("View campaigns") }
         }
-        Text("V0.0.1 · Local-only MVP · No automatic texting, cloud sync or payments",
+        InfoCard {
+            Text("Back up your data", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            Spacer(Modifier.height(6.dp))
+            Text("Export a local JSON backup before changing phones or uninstalling. The file contains customer phone numbers and other private information; store it securely.",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+            Row {
+                OutlinedButton(onClick = onExport) { Text("Export") }
+                Spacer(Modifier.width(10.dp))
+                OutlinedButton(onClick = onImport) { Text("Import") }
+            }
+            if (backupMessage.isNotBlank()) Text(backupMessage, fontSize = 12.sp, color = Highlight)
+        }
+        Text("V0.0.2 · Local-only MVP · No automatic texting, cloud sync or payments",
             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
     }
 }
 
 @Composable
 private fun CustomerScreen(customers: List<Customer>, onAdd: () -> Unit,
+                           onEdit: (String) -> Unit,
                            onOptOut: (String) -> Unit, onIssue: (String) -> Unit,
                            onBooking: (String) -> Unit) {
+    var query by remember { mutableStateOf("") }
+    val matches = customers.filter {
+        it.name.contains(query, ignoreCase = true) ||
+        it.phone.contains(query) || it.zip.contains(query) ||
+        it.service.contains(query, ignoreCase = true)
+    }.sortedBy { it.name.lowercase() }
     if (customers.isEmpty()) {
         Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center) {
@@ -470,8 +490,16 @@ private fun CustomerScreen(customers: List<Customer>, onAdd: () -> Unit,
             Button(onClick = onAdd) { Text("Add customer") }
         }
     } else LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Button(onClick = onAdd) { Icon(Icons.Default.Add, null); Text(" Add customer") } }
-        items(customers, key = { it.id }) { c ->
+        item {
+            OutlinedTextField(value = query, onValueChange = { query = it },
+                label = { Text("Search names, phone, ZIP or service") },
+                modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Spacer(Modifier.height(10.dp))
+            Button(onClick = onAdd) { Icon(Icons.Default.Add, null); Text(" Add customer") }
+            Text("${matches.size} of ${customers.size} customers",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+        }
+        items(matches, key = { it.id }) { c ->
             InfoCard(Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(c.name, fontWeight = FontWeight.Bold, fontSize = 17.sp)
@@ -482,6 +510,12 @@ private fun CustomerScreen(customers: List<Customer>, onAdd: () -> Unit,
                 Text(if (c.consent && c.consentEvidence.isNotBlank()) "SMS permission documented" else "No SMS marketing permission",
                     color = if (c.consent && c.consentEvidence.isNotBlank()) Highlight else Color(0xFFFBBF24),
                     fontSize = 12.sp)
+                if (c.address.isNotBlank()) Text(c.address, fontSize = 12.sp)
+                if (c.notes.isNotBlank()) Text(c.notes, fontSize = 12.sp, maxLines = 2)
+                OutlinedButton(onClick = { onEdit(c.id) }) {
+                    Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp))
+                    Text(" Edit profile")
+                }
                 if (c.optedOut) Text("OPTED OUT — promotional contact blocked", color = Color(0xFFFF9D9D), fontSize = 12.sp)
                 if (c.issueOpen) Text("Unresolved issue — campaign blocked", color = Color(0xFFFBBF24), fontSize = 12.sp)
                 if (c.futureBooked) Text("Upcoming appointment recorded", fontSize = 12.sp)
