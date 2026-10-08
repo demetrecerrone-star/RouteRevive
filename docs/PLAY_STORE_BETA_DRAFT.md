@@ -1,5 +1,7 @@
 # RouteRevive — Google Play Listing / Beta Draft
 
+**New cloud disclosures (v0.2.0):** Optional Supabase business sign-in and explicit password-encrypted cloud backup/restore of records and job photos. This is NOT automatic live syncing and does not provide collaborative staff accounts or public online booking. Supabase can process account email and login metadata. Confirm project settings, privacy policy and Play Data safety answers before submitting.
+
 **Working title:** RouteRevive: Service Business Planner
 
 **Short description (under 80 characters):**
