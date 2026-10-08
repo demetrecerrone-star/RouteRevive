@@ -115,7 +115,7 @@ class CloudVault(context: Context) {
         val editor = prefs.edit()
             .putString("url", normalized.url).putString("public_key", normalized.publicKey)
         if (previous != normalized) {
-            editor.remove("auth").remove("auto_password").remove("auto_hours")
+            editor.remove("auth").remove("auto_password").remove("auto_hours").remove("retention_keep")
                 .remove("sync_name").remove("sync_hash")
         }
         check(editor.commit()) { "Failed to save cloud configuration." }
@@ -148,6 +148,16 @@ class CloudVault(context: Context) {
             runCatching { JSONObject(open(encoded)).getString("refresh_token") }.getOrNull()
         }
 
+    fun retentionKeep(): Int = prefs.getInt("retention_keep", 0)
+        .takeIf { CloudRetentionRules.allowed(it) } ?: 0
+
+    fun setRetentionKeep(count: Int) {
+        require(CloudRetentionRules.allowed(count)) { "Invalid cloud retention limit." }
+        check(prefs.edit().putInt("retention_keep", count).commit()) {
+            "Could not save cloud cleanup settings."
+        }
+    }
+
     fun automaticEnabled(): Boolean = storedIdentity() != null &&
         prefs.contains("auto_password") && autoHours() > 0
 
@@ -174,6 +184,7 @@ class CloudVault(context: Context) {
 
     fun disableAutomatic(clearBaseline: Boolean = false) {
         val editor = prefs.edit().remove("auto_password").remove("auto_hours")
+            .remove("retention_keep")
         if (clearBaseline) editor.remove("sync_name").remove("sync_hash")
         check(editor.commit()) { "Unable to disable automatic backups." }
     }
@@ -353,6 +364,44 @@ class SupabaseCloud(private val settings: CloudSettings) {
             CloudBackupFile(name, obj.optJSONObject("metadata")?.optLong("size") ?: 0L,
                 obj.optString("created_at"))
         }
+    }
+
+    /**
+     * List every snapshot before choosing which objects are safe to remove.
+     * Fail closed if listing cannot be completed within the safety cap.
+     */
+    fun allBackups(session: CloudSession): List<CloudBackupFile> {
+        val found = mutableListOf<CloudBackupFile>()
+        var offset = 0
+        while (offset < 2000) {
+            val response = request("POST", "/storage/v1/object/list/" + CloudRules.BUCKET,
+                bearer = session.accessToken,
+                json = JSONObject().put("prefix", session.userId + "/")
+                    .put("limit", 100).put("offset", offset)
+                    .put("sortBy", JSONObject().put("column", "created_at")
+                        .put("order", "desc")))
+            val rows = response.optJSONArray("items")
+                ?: error("Cloud returned an invalid backup list.")
+            for (i in 0 until rows.length()) {
+                val row = rows.optJSONObject(i) ?: continue
+                val name = row.optString("name")
+                if (CloudRules.validName(name)) {
+                    found += CloudBackupFile(name,
+                        row.optJSONObject("metadata")?.optLong("size") ?: 0L,
+                        row.optString("created_at"))
+                }
+            }
+            if (rows.length() < 100) return found.sortedByDescending { it.name }
+            offset += 100
+        }
+        error("Too many cloud archives to manage safely. No files were deleted.")
+    }
+
+    /** Single object deletion; requires a narrow DELETE policy for this account's own UUID folder. */
+    fun delete(session: CloudSession, name: String) {
+        val checked = CloudRules.path(session.userId, name)
+        request("DELETE", "/storage/v1/object/" + CloudRules.BUCKET + "/" + checked,
+            bearer = session.accessToken)
     }
 
     /** Paged listing is essential: older automatic snapshots must not be mistaken for none. */
