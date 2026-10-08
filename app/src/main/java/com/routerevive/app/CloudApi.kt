@@ -22,11 +22,20 @@ data class CloudSettings(val url: String, val publicKey: String) {
     fun valid(): Boolean {
         // Confine user credentials to official Supabase project hosts.
         val host = Regex("^https://[a-z0-9-]{4,80}\\.supabase\\.co$")
+        val key = publicKey.trim()
+        val acceptableKey = if (key.startsWith("sb_publishable_")) {
+            key.length in 30..2500
+        } else if (key.startsWith("eyJ") && key.count { it == '.' } == 2) {
+            // Refuse legacy service_role JWTs; only legacy anon keys are permitted.
+            runCatching {
+                val payload = String(java.util.Base64.getUrlDecoder()
+                    .decode(key.split('.')[1]), Charsets.UTF_8)
+                JSONObject(payload).optString("role") == "anon"
+            }.getOrDefault(false)
+        } else false
         return host.matches(url.trimEnd('/')) &&
-            publicKey.length in 30..2500 &&
-            !publicKey.contains("service_role", ignoreCase = true) &&
-            !publicKey.contains("sb_secret_", ignoreCase = true) &&
-            !publicKey.contains(" ") && !publicKey.contains("\n")
+            key.length in 30..2500 && acceptableKey &&
+            !key.contains(" ") && !key.contains("\n")
     }
     fun normalized() = copy(url = url.trimEnd('/'), publicKey = publicKey.trim())
 }
