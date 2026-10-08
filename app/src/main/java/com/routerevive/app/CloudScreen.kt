@@ -400,6 +400,58 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
     }
 
+    pendingDelete?.let { snapshot ->
+        AlertDialog(
+            onDismissRequest = { if (!busy) pendingDelete = null },
+            title = { Text("Permanently delete this backup?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("This removes the encrypted cloud archive permanently. " +
+                        "You cannot recover it, and another device may depend on it. " +
+                        "Local phone records are not deleted.")
+                    Text(snapshot.name, fontSize = 11.sp)
+                }
+            },
+            confirmButton = { TextButton(enabled = !busy, onClick = {
+                pendingDelete = null
+                startWork {
+                    val latest = withContext(Dispatchers.IO) {
+                        CloudSyncEngine.deleteOldSnapshot(vault, snapshot.name)
+                        val signed = CloudAuth.refresh(vault, settings)
+                        SupabaseCloud(settings).backups(signed)
+                    }
+                    backups = latest
+                    "Old encrypted cloud backup permanently deleted."
+                }
+            }) { Text("Delete permanently", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) {
+                Text("Keep backup")
+            } }
+        )
+    }
+
+    if (cleanupConfirm) AlertDialog(
+        onDismissRequest = { if (!busy) cleanupConfirm = false },
+        title = { Text("Clean up old automatic backups?") },
+        text = { Text("Keep the newest $retentionKeep automatic backups, " +
+            "plus protected cloud heads and this device's sync baseline. " +
+            "Manual backups are preserved. Deleted archives cannot be recovered. " +
+            "Other devices may need an older version.") },
+        confirmButton = { TextButton(enabled = !busy, onClick = {
+            cleanupConfirm = false
+            startWork {
+                val result = withContext(Dispatchers.IO) {
+                    val count = CloudSyncEngine.cleanupNow(vault)
+                    val signed = CloudAuth.refresh(vault, settings)
+                    count to SupabaseCloud(settings).backups(signed)
+                }
+                backups = result.second
+                "${result.first} old automatic backup(s) deleted. Protected archives remain."
+            }
+        }) { Text("Delete older backups") } },
+        dismissButton = { TextButton(onClick = { cleanupConfirm = false }) { Text("Cancel") } }
+    )
+
     if (showUpload) AlertDialog(onDismissRequest = {
         if (!busy) { showUpload = false; archivePassword = "" }
     }, title = { Text("Encrypt & upload complete backup?") },
