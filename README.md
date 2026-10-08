@@ -6,7 +6,7 @@ RouteRevive helps local pressure-washing and service businesses recontact previo
 
 ## Download the Android APK
 
-1. Open [the successful v0.0.2 Android build](https://github.com/demetrecerrone-star/RouteRevive/actions/runs/37723262063).
+1. Open [the Android build history](https://github.com/demetrecerrone-star/RouteRevive/actions/workflows/android.yml).
 2. Under **Artifacts**, choose **RouteRevive-v0.0.2-debug** (sign into GitHub if prompted).
 3. Download and unzip the artifact, then install `app-debug.apk` on Android 8.0 or newer.
 4. This is a development APK, **not a Google Play production release**. Android may ask you to allow installation from your files app. Install only if you trust your own repository's build.
