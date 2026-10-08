@@ -66,8 +66,6 @@ object BetaIntegrity {
             listOfNotNull(business.logoFile.takeIf { it.isNotBlank() })
         if (photoNames.any { !photoExists(it) })
             errors += "Some job photos or the business logo are missing"
-        if (customers.any { it.optedOut && it.consent && it.consentEvidence.isNotBlank() })
-            errors += "Some opted-out customers retain older marketing permission records (sending remains blocked)"
         return BetaAudit(customers.size, appointments.size, jobs.size,
             requests.size, errors.distinct())
     }
@@ -95,6 +93,15 @@ object BackupValidator {
         val appointments = array("appointments")
         val jobs = array("jobs")
         val requests = array("bookingRequests")
+        // Reject optional fields that are present with the wrong JSON type.
+        for (name in listOf("appointments", "jobs", "bookingRequests")) {
+            require(!root.has(name) || root.optJSONArray(name) != null) {
+                "Invalid backup array: $name"
+            }
+        }
+        require(!root.has("businessProfile") || root.optJSONObject("businessProfile") != null) {
+            "Invalid business profile"
+        }
         require(customers.length() <= 50000 && campaigns.length() <= 10000 &&
             appointments.length() <= 100000 && jobs.length() <= 100000 &&
             requests.length() <= 100000) { "Backup record count exceeds safe limit" }
