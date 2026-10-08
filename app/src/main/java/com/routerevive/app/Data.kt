@@ -46,7 +46,8 @@ data class Appointment(
     val status: String = "SCHEDULED",
     val price: Double = 0.0,
     val notes: String = "",
-    val campaignId: String = ""
+    val campaignId: String = "",
+    val lastReminderAt: String = ""
 )
 
 data class Recipient(
@@ -258,7 +259,8 @@ class LocalStore(context: Context) {
                     service = j.getString("service"), date = j.getString("date"),
                     time = j.getString("time"), durationMinutes = j.optInt("durationMinutes", 60),
                     status = j.optString("status", "SCHEDULED"), price = j.optDouble("price"),
-                    notes = j.optString("notes"), campaignId = j.optString("campaignId")
+                    notes = j.optString("notes"), campaignId = j.optString("campaignId"),
+                    lastReminderAt = j.optString("lastReminderAt")
                 )
             }.getOrNull()
         }
@@ -304,11 +306,33 @@ class LocalStore(context: Context) {
         }
     }
 
-    fun exportJson(): String = data().apply { put("schemaVersion", 5) }.toString(2)
+    fun loadBookingRequests(): List<BookingRequest> {
+        val array = data().optJSONArray("bookingRequests") ?: return emptyList()
+        return (0 until array.length()).mapNotNull { i ->
+            runCatching {
+                val j = array.getJSONObject(i)
+                BookingRequest(
+                    id = j.getString("id"),
+                    name = j.getString("name"), phone = j.getString("phone"),
+                    zip = j.getString("zip"), service = j.getString("service"),
+                    requestedDate = j.getString("requestedDate"),
+                    requestedTime = j.getString("requestedTime"),
+                    durationMinutes = j.optInt("durationMinutes", 60),
+                    quotedPrice = j.optDouble("quotedPrice"),
+                    notes = j.optString("notes"), source = j.optString("source", "Phone"),
+                    status = j.optString("status", "NEW"),
+                    createdAt = j.optString("createdAt"),
+                    bookedAppointmentId = j.optString("bookedAppointmentId")
+                ).takeIf { BookingRules.valid(it) }
+            }.getOrNull()
+        }
+    }
+
+    fun exportJson(): String = data().apply { put("schemaVersion", 6) }.toString(2)
 
     fun importJson(payload: String) {
         val root = JSONObject(payload)
-        require(root.optInt("schemaVersion", 1) in 1..5) { "Unsupported backup version" }
+        require(root.optInt("schemaVersion", 1) in 1..6) { "Unsupported backup version" }
         require(root.optJSONArray("customers") != null && root.optJSONArray("campaigns") != null) {
             "Not a RouteRevive backup"
         }
@@ -321,6 +345,7 @@ class LocalStore(context: Context) {
             val parsedCampaigns = loadCampaigns()
             val parsedAppointments = loadAppointments()
             val parsedJobs = loadJobs()
+            val parsedRequests = loadBookingRequests()
             require(parsedCustomers.size == root.getJSONArray("customers").length()) { "Invalid customer data" }
             require(parsedCampaigns.size == root.getJSONArray("campaigns").length()) { "Invalid campaign data" }
             require(parsedAppointments.size == (root.optJSONArray("appointments")?.length() ?: 0)) {
@@ -329,13 +354,16 @@ class LocalStore(context: Context) {
             require(parsedJobs.size == (root.optJSONArray("jobs")?.length() ?: 0)) {
                 "Invalid job data"
             }
+            require(parsedRequests.size == (root.optJSONArray("bookingRequests")?.length() ?: 0)) {
+                "Invalid booking requests"
+            }
         } catch (e: Exception) {
             prefs.edit().putString("db", old).commit()
             throw IllegalArgumentException("Backup data is invalid: ${e.message}")
         }
     }
 
-    fun save(customers: List<Customer>, campaigns: List<Campaign>, appointments: List<Appointment> = emptyList(), jobs: List<JobRecord> = emptyList(), business: BusinessProfile = BusinessProfile()) {
+    fun save(customers: List<Customer>, campaigns: List<Campaign>, appointments: List<Appointment> = emptyList(), jobs: List<JobRecord> = emptyList(), business: BusinessProfile = BusinessProfile(), requests: List<BookingRequest> = emptyList()) {
         val cs = JSONArray()
         customers.forEach { c ->
             cs.put(JSONObject().apply {
@@ -375,7 +403,7 @@ class LocalStore(context: Context) {
                 put("id", a.id); put("customerId", a.customerId); put("service", a.service)
                 put("date", a.date); put("time", a.time); put("durationMinutes", a.durationMinutes)
                 put("status", a.status); put("price", a.price); put("notes", a.notes)
-                put("campaignId", a.campaignId)
+                put("campaignId", a.campaignId); put("lastReminderAt", a.lastReminderAt)
             })
         }
         val js = JSONArray()
@@ -422,8 +450,24 @@ class LocalStore(context: Context) {
             put("paymentTerms", business.paymentTerms)
             put("logoFile", business.logoFile)
         }
-        persistDb(JSONObject().put("schemaVersion", 5)
+        val br = JSONArray()
+        requests.forEach { request ->
+            br.put(JSONObject().apply {
+                put("id", request.id); put("name", request.name)
+                put("phone", request.phone); put("zip", request.zip)
+                put("service", request.service)
+                put("requestedDate", request.requestedDate)
+                put("requestedTime", request.requestedTime)
+                put("durationMinutes", request.durationMinutes)
+                put("quotedPrice", request.quotedPrice)
+                put("notes", request.notes); put("source", request.source)
+                put("status", request.status); put("createdAt", request.createdAt)
+                put("bookedAppointmentId", request.bookedAppointmentId)
+            })
+        }
+        persistDb(JSONObject().put("schemaVersion", 6)
             .put("customers", cs).put("campaigns", cps).put("appointments", aps)
-            .put("jobs", js).put("businessProfile", bp).toString())
+            .put("jobs", js).put("businessProfile", bp)
+            .put("bookingRequests", br).toString())
     }
 }
