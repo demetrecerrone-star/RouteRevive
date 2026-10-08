@@ -140,9 +140,14 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
     fun updateRecipient(c: Campaign, r: Recipient) {
         updateCampaign(c.copy(recipients = c.recipients.map { if (it.customerId == r.customerId) r else it }))
     }
+    fun hasFutureAppointment(customerId: String): Boolean =
+        appointments.any { a -> a.customerId == customerId && a.status == "SCHEDULED" &&
+            runCatching { !LocalDate.parse(a.date).isBefore(LocalDate.now()) }.getOrDefault(false) }
+
     fun allowed(customer: Customer, campaign: Campaign): Boolean =
         CampaignRules.reasons(
-            customer, campaign.zip, campaign.service, LocalDate.now(),
+            customer.copy(futureBooked = customer.futureBooked || hasFutureAppointment(customer.id)),
+            campaign.zip, campaign.service, LocalDate.now(),
             customers.toList(), campaigns.filterNot { it.id == campaign.id }
         ).isEmpty() && !LocalDate.parse(campaign.expiryDate).isBefore(LocalDate.now())
 
@@ -226,12 +231,28 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         } else appError = "Time slot overlaps another booking."
                     }, onStatus = { a, status ->
                         val i = appointments.indexOfFirst { it.id == a.id }
-                        if (i >= 0) { appointments[i] = a.copy(status = status); save() }
+                        if (i >= 0) {
+                            appointments[i] = a.copy(status = status)
+                            if (a.campaignId.isNotBlank()) {
+                                val campaignIndex = campaigns.indexOfFirst { it.id == a.campaignId }
+                                if (campaignIndex >= 0) {
+                                    val campaign = campaigns[campaignIndex]
+                                    campaigns[campaignIndex] = campaign.copy(
+                                        recipients = campaign.recipients.map { r ->
+                                            if (r.customerId == a.customerId && r.status == "BOOKED") {
+                                                r.copy(status = if (status == "CANCELLED") "CANCELLED" else "COMPLETED")
+                                            } else r
+                                        })
+                                }
+                            }
+                            save()
+                        }
                     })
                 "campaigns" -> CampaignScreen(campaigns.toList(),
                     onNew = { page = "new_campaign" },
                     onSelect = { selectedId = it; page = "campaign_detail" })
-                "new_campaign" -> NewCampaignScreen(customers.toList(), campaigns.toList(), onSave = {
+                "new_campaign" -> NewCampaignScreen(customers.toList(), campaigns.toList(),
+                    appointments.toList(), onSave = {
                     campaigns.add(it); save(); selectedId = it.id; page = "campaign_detail"
                 })
                 "campaign_detail" -> if (current == null) {
@@ -606,7 +627,8 @@ private fun CampaignScreen(campaigns: List<Campaign>, onNew: () -> Unit, onSelec
 }
 
 @Composable
-private fun NewCampaignScreen(customers: List<Customer>, campaigns: List<Campaign>, onSave: (Campaign) -> Unit) {
+private fun NewCampaignScreen(customers: List<Customer>, campaigns: List<Campaign>,
+                              appointments: List<Appointment>, onSave: (Campaign) -> Unit) {
     var title by remember { mutableStateOf("Neighborhood repeat-service offer") }
     var business by remember { mutableStateOf("") }
     var zip by remember { mutableStateOf("") }
@@ -617,8 +639,11 @@ private fun NewCampaignScreen(customers: List<Customer>, campaigns: List<Campaig
     var discount by remember { mutableStateOf("0") }
     var capacity by remember { mutableStateOf("4") }
 
-    val eligible = customers.filter {
-        CampaignRules.reasons(it, zip, service, LocalDate.now(), customers, campaigns).isEmpty()
+    val eligible = customers.filter { c ->
+        val upcoming = appointments.any { a -> a.customerId == c.id && a.status == "SCHEDULED" &&
+            runCatching { !LocalDate.parse(a.date).isBefore(LocalDate.now()) }.getOrDefault(false) }
+        CampaignRules.reasons(c.copy(futureBooked = c.futureBooked || upcoming),
+            zip, service, LocalDate.now(), customers, campaigns).isEmpty()
     }
     val good = title.isNotBlank() && business.isNotBlank() && zip.matches(Regex("\\d{5}")) &&
         service.isNotBlank() && (dateDays.toLongOrNull() ?: -1) in 1..365 &&
