@@ -21,7 +21,23 @@ data class Customer(
     val futureBooked: Boolean = false,
     val lastContact: String = "",
     val lastPrice: Double = 0.0,
+    val address: String = "",
+    val notes: String = "",
+    val consentDate: String = "",
     val demo: Boolean = false
+)
+
+data class Appointment(
+    val id: String = UUID.randomUUID().toString(),
+    val customerId: String,
+    val service: String,
+    val date: String,
+    val time: String,
+    val durationMinutes: Int = 60,
+    val status: String = "SCHEDULED",
+    val price: Double = 0.0,
+    val notes: String = "",
+    val campaignId: String = ""
 )
 
 data class Recipient(
@@ -119,7 +135,8 @@ class LocalStore(context: Context) {
                     consentEvidence = j.optString("consentEvidence"), optedOut = j.optBoolean("optedOut"),
                     issueOpen = j.optBoolean("issueOpen"), futureBooked = j.optBoolean("futureBooked"),
                     lastContact = j.optString("lastContact"), lastPrice = j.optDouble("lastPrice"),
-                    demo = j.optBoolean("demo")
+                    address = j.optString("address"), notes = j.optString("notes"),
+                    consentDate = j.optString("consentDate"), demo = j.optBoolean("demo")
                 )
             }.getOrNull()
         }
@@ -153,7 +170,50 @@ class LocalStore(context: Context) {
         }
     }
 
-    fun save(customers: List<Customer>, campaigns: List<Campaign>) {
+    fun loadAppointments(): List<Appointment> {
+        val array = data().optJSONArray("appointments") ?: return emptyList()
+        return (0 until array.length()).mapNotNull { i ->
+            runCatching {
+                val j = array.getJSONObject(i)
+                Appointment(
+                    id = j.getString("id"), customerId = j.getString("customerId"),
+                    service = j.getString("service"), date = j.getString("date"),
+                    time = j.getString("time"), durationMinutes = j.optInt("durationMinutes", 60),
+                    status = j.optString("status", "SCHEDULED"), price = j.optDouble("price"),
+                    notes = j.optString("notes"), campaignId = j.optString("campaignId")
+                )
+            }.getOrNull()
+        }
+    }
+
+    fun exportJson(): String = data().apply { put("schemaVersion", 2) }.toString(2)
+
+    fun importJson(payload: String) {
+        val root = JSONObject(payload)
+        require(root.optInt("schemaVersion", 1) in 1..2) { "Unsupported backup version" }
+        require(root.optJSONArray("customers") != null && root.optJSONArray("campaigns") != null) {
+            "Not a RouteRevive backup"
+        }
+        require(root.length() <= 12) { "Unexpected backup structure" }
+        require(payload.length <= 5_000_000) { "Backup is too large" }
+        val old = prefs.getString("db", "{}") ?: "{}"
+        check(prefs.edit().putString("db", root.toString()).commit()) { "Import failed to save" }
+        try {
+            val parsedCustomers = loadCustomers()
+            val parsedCampaigns = loadCampaigns()
+            val parsedAppointments = loadAppointments()
+            require(parsedCustomers.size == root.getJSONArray("customers").length()) { "Invalid customer data" }
+            require(parsedCampaigns.size == root.getJSONArray("campaigns").length()) { "Invalid campaign data" }
+            require(parsedAppointments.size == (root.optJSONArray("appointments")?.length() ?: 0)) {
+                "Invalid appointment data"
+            }
+        } catch (e: Exception) {
+            prefs.edit().putString("db", old).commit()
+            throw IllegalArgumentException("Backup data is invalid: ${e.message}")
+        }
+    }
+
+    fun save(customers: List<Customer>, campaigns: List<Campaign>, appointments: List<Appointment> = emptyList()) {
         val cs = JSONArray()
         customers.forEach { c ->
             cs.put(JSONObject().apply {
@@ -162,7 +222,8 @@ class LocalStore(context: Context) {
                 put("consent", c.consent); put("consentEvidence", c.consentEvidence)
                 put("optedOut", c.optedOut); put("issueOpen", c.issueOpen)
                 put("futureBooked", c.futureBooked); put("lastContact", c.lastContact)
-                put("lastPrice", c.lastPrice); put("demo", c.demo)
+                put("lastPrice", c.lastPrice); put("address", c.address)
+                put("notes", c.notes); put("consentDate", c.consentDate); put("demo", c.demo)
             })
         }
         val cps = JSONArray()
@@ -183,8 +244,18 @@ class LocalStore(context: Context) {
                 put("capacity", c.capacity); put("createdAt", c.createdAt); put("recipients", rs)
             })
         }
-        // Single atomic preference update, so customers and campaign state stay together.
-        check(prefs.edit().putString("db", JSONObject().put("customers", cs).put("campaigns", cps).toString()).commit()) {
+        val aps = JSONArray()
+        appointments.forEach { a ->
+            aps.put(JSONObject().apply {
+                put("id", a.id); put("customerId", a.customerId); put("service", a.service)
+                put("date", a.date); put("time", a.time); put("durationMinutes", a.durationMinutes)
+                put("status", a.status); put("price", a.price); put("notes", a.notes)
+                put("campaignId", a.campaignId)
+            })
+        }
+        // Single atomic preference update; v0.0.1 data remains readable on upgrade.
+        check(prefs.edit().putString("db", JSONObject().put("schemaVersion", 2)
+            .put("customers", cs).put("campaigns", cps).put("appointments", aps).toString()).commit()) {
             "Unable to save RouteRevive data"
         }
     }
