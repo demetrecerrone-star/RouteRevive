@@ -111,7 +111,7 @@ fun BusinessScreen(profile: BusinessProfile, customers: List<Customer>,
                 Button(enabled = valid, modifier = Modifier.fillMaxWidth(),
                     onClick = {
                         onSave(BusinessProfile(name.trim(), phone.trim(), email.trim(),
-                            address.trim(), website.trim(), terms.trim(), logo))
+                            address.trim(), website.trim(), terms.trim(), logo, profile.workspaceId))
                         message = "Business profile saved."
                     }) { Text("Save business profile") }
                 HorizontalDivider()
