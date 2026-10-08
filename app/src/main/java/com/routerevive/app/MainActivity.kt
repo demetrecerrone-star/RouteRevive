@@ -382,6 +382,8 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                     onRequests = { page = "requests" },
                     onCampaigns = { page = "campaigns" },
                     onBusiness = { page = "business" },
+                    onCloud = { page = "cloud" },
+                    onInsights = { page = "insights" },
                     onExport = { backupAction = "export"; backupPassword = "" },
                     onImport = { backupAction = "import"; backupPassword = "" },
                     onLegacyImport = { importLauncher.launch(arrayOf("application/json", "text/plain")) },
