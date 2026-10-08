@@ -20,12 +20,18 @@ fun MoreScreen(
     onCampaigns: () -> Unit, onBusiness: () -> Unit,
     onBookingPage: () -> Unit,
     onBeta: () -> Unit,
-    onCloud: () -> Unit
+    onCloud: () -> Unit,
+    onInsights: () -> Unit,
+    onAlerts: () -> Unit
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("YOUR BUSINESS TOOLS", color = MaterialTheme.colorScheme.primary,
             fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        MoreEntry("Business analytics", "Payment trends, overdue invoices and customer activity",
+            onClick = onInsights)
+        MoreEntry("Reminders & alerts", "Private local notifications for upcoming work and payments",
+            onClick = onAlerts)
         MoreEntry("Private cloud backups", "Business sign-in and password-encrypted cross-device snapshots",
             onClick = onCloud)
         MoreEntry("Beta readiness & privacy", "Local data health, release checklist and privacy details",
@@ -42,7 +48,7 @@ fun MoreScreen(
             onClick = onBusiness)
         HorizontalDivider()
         Text("Cloud & local data", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        Text("Supabase cloud backup is optional. Connect your own project to use private account sign-in and manually upload encrypted archives. No automatic two-way sync, team roles, or live booking server yet.",
+        Text("Supabase cloud backup is optional. Private encrypted snapshots can be uploaded manually or on a schedule. Importing cloud changes requires confirmation. No live multi-user edits, merging, or public booking server yet.",
             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
         Text("Workspace: " + business.workspaceId.take(12),
             color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
