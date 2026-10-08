@@ -34,8 +34,28 @@ data class JobRecord(
     val payments: List<JobPayment> = emptyList(),
     val dueDate: String = "",
     val invoiceIssued: Boolean = false,
-    val invoiceNumber: String = ""
+    val invoiceNumber: String = "",
+    val status: String = "PLANNED",
+    val statusUpdatedAt: String = ""
 )
+
+object JobProgress {
+    val stages = listOf("PLANNED", "IN_PROGRESS", "ON_HOLD", "COMPLETED")
+    fun valid(stage: String): Boolean = stage in stages
+    fun label(stage: String): String = when (stage) {
+        "PLANNED" -> "Planned"
+        "IN_PROGRESS" -> "In progress"
+        "ON_HOLD" -> "On hold"
+        "COMPLETED" -> "Completed"
+        else -> "Unknown"
+    }
+    fun update(job: JobRecord, newStatus: String, today: LocalDate = LocalDate.now()): JobRecord {
+        require(valid(newStatus)) { "Invalid job progress status." }
+        return if (job.status == newStatus) job else job.copy(
+            status = newStatus, statusUpdatedAt = today.toString()
+        )
+    }
+}
 
 object JobMath {
     private fun dollars(value: Double) = kotlin.math.round(value * 100.0) / 100.0
