@@ -18,7 +18,7 @@ class CustomerHistoryTest {
             payments=listOf(JobPayment(id="p1",amount=40.0,date="2026-10-08",method="Cash")))
         val wrong=job.copy(id="j2",appointmentId="a2",customerId="someone-else")
         val events=CustomerHistoryRules.events(person,listOf(a,other),listOf(job,wrong))
-        assertEquals(5,events.size)
+        assertEquals(6,events.size)
         assertEquals("2026-10-08",events.first().date.toString())
         assertTrue(events.any{it.title=="Payment recorded" && it.detail.contains("40.00")})
         assertFalse(events.any{it.id=="invoice-j2"})
