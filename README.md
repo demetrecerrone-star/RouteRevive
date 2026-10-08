@@ -1,8 +1,18 @@
+# RouteRevive v0.2.2 — Business analytics and private reminders
+
+New in v0.2.2: **More → Business analytics** shows a 6/12-month chart of actual job payment receipts, total recorded collections, issued invoice balances, overdue invoices, customers with multiple recorded bookings, and completed appointments. This information is computed from the local records on your phone; it is not sent to an analytics service.
+
+**More → Reminders & alerts** lets the owner opt in to a private daily summary (approximately 8 AM subject to Android background scheduling). Select upcoming appointments, overdue invoices, and/or automatic cloud backup problems. On Android 13+ the app asks for notification permission only when enabling reminders. Notifications show counts and a backup status, never customer names, addresses, or amounts. No customer SMS, email, or payment requests are sent automatically. Turning reminders off cancels the schedule.
+
+**Install the signed v0.2.2 APK over your current app without uninstalling**. The version code has been increased to 13; existing encrypted local records and cloud settings stay on this installation. Keep an encrypted backup before upgrading. Tests and release lint run in GitHub Actions.
+
+---
+
 # RouteRevive v0.2.1 — Automatic encrypted cloud backups and safe snapshot sync
 
 New in v0.2.0: the app can connect to a Supabase project, create/sign in to a business account using email/password, remember its session using Android Keystore-encrypted refresh credentials, upload new password-encrypted full backups (with job photos) to a private RLS-protected cloud bucket, list recent snapshots, and restore a chosen snapshot on another phone.
 
-**Manual encrypted backup/restore remains supported; v0.2.1 also introduces opt-in daily or weekly background encrypted snapshots and explicit import of newer snapshots on a second phone.** Imports require confirmation and are blocked when both devices have changed since their common snapshot. This is NOT real-time live synchronization or merge-capable team editing. Manual restores still require a destructive replace confirmation. Offline local use continues unchanged. There is no live public booking endpoint, staff sharing, concurrent multi-device merging, background automatic uploading, or payment integration.
+**Manual encrypted backup/restore remains supported; v0.2.1 also introduces opt-in daily or weekly background encrypted snapshots and explicit import of newer snapshots on a second phone.** Imports require confirmation and are blocked when both devices have changed since their common snapshot. This is NOT real-time live synchronization or merge-capable team editing. Manual restores still require a destructive replace confirmation. Offline local use continues unchanged. There is no live public booking endpoint, staff sharing, concurrent multi-device merging, or payment integration.
 
 To connect it to a real cloud, the business must create its own Supabase project, run a secure private Storage bucket / user-UUID Row Level Security policy, and enter the **public** project URL + publishable/anon key in More → Private cloud backups. **Never enter a service_role or secret key.** Follow [Supabase setup instructions](docs/SUPABASE_SETUP.md) before using a cloud account. Until then, cloud features remain disconnected.
 

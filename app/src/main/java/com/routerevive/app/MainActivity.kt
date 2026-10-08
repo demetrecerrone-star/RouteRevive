@@ -314,7 +314,8 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                 NavigationBarItem(
                     selected = page == id || (id == "more" &&
                         page in setOf("map", "campaigns", "campaign_detail",
-                            "new_campaign", "requests", "business", "booking_page", "beta", "cloud")),
+                            "new_campaign", "requests", "business", "booking_page", "beta", "cloud",
+                            "insights", "alerts")),
                     onClick = { page = id },
                     icon = { Icon(icon, contentDescription = title) }, label = { Text(title, fontSize = 11.sp) }
                 )
@@ -340,6 +341,8 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         "booking_page" -> "Customer booking page"
                         "beta" -> "Beta readiness & privacy"
                         "cloud" -> "Private cloud backups"
+                        "insights" -> "Business analytics"
+                        "alerts" -> "Business reminders"
                         "map" -> "Neighborhood map"
                         "campaigns" -> "Neighborhood campaigns"
                         "new_campaign" -> "New campaign"
@@ -387,7 +390,14 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                     onBusiness = { page = "business" },
                     onBookingPage = { page = "booking_page" },
                     onBeta = { page = "beta" },
-                    onCloud = { page = "cloud" })
+                    onCloud = { page = "cloud" },
+                    onInsights = { page = "insights" },
+                    onAlerts = { page = "alerts" })
+                "insights" -> BusinessInsightsScreen(
+                    customers = customers.toList(),
+                    appointments = appointments.toList(),
+                    jobs = jobs.toList())
+                "alerts" -> BusinessAlertsScreen()
                 "cloud" -> CloudScreen(store = store, onRestoreComplete = {
                     customers.clear(); customers.addAll(store.loadCustomers())
                     campaigns.clear(); campaigns.addAll(store.loadCampaigns())
