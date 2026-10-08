@@ -16,7 +16,28 @@ android {
         versionName = "0.0.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-    buildTypes { release { isMinifyEnabled = false } }
+    val signedStorePath = System.getenv("RR_SIGNING_FILE")
+    val signedPassword = System.getenv("RR_STORE_PASSWORD")
+    val hasStableSigning = !signedStorePath.isNullOrBlank() && !signedPassword.isNullOrBlank()
+
+    signingConfigs {
+        if (hasStableSigning) {
+            create("stable") {
+                storeFile = file(signedStorePath!!)
+                storePassword = signedPassword
+                keyAlias = "routerevive"
+                keyPassword = signedPassword
+                enableV1Signing = true
+                enableV2Signing = true
+            }
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            if (hasStableSigning) signingConfig = signingConfigs.getByName("stable")
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
