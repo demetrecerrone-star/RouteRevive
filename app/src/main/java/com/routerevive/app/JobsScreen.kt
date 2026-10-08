@@ -75,9 +75,10 @@ fun JobsScreen(
             val visible = appointments.filter { a ->
                 val stage = jobs.firstOrNull { it.appointmentId == a.id }?.status ?: "PLANNED"
                 when (statusFilter) {
-                    "Active" -> stage in setOf("PLANNED", "IN_PROGRESS") && a.status != "CANCELLED"
+                    "Active" -> stage in setOf("PLANNED", "IN_PROGRESS") &&
+                        a.status != "CANCELLED"
                     "On hold" -> stage == "ON_HOLD"
-                    "Completed" -> stage == "COMPLETED" || (stage == "PLANNED" && a.status == "COMPLETED")
+                    "Completed" -> stage == "COMPLETED"
                     else -> true
                 }
             }.sortedWith(compareByDescending<Appointment> { it.date }.thenBy { it.time })
