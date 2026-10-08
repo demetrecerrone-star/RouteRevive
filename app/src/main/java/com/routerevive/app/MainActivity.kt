@@ -4,6 +4,10 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -52,7 +56,7 @@ class MainActivity : ComponentActivity() {
                     secondary = Color(0xFF9CB0C9), onBackground = Color.White
                 )
             ) {
-                RouteApp(store, openSms = { phone, message ->
+                SecurityGate(store) { RouteApp(store, openSms = { phone, message ->
                     try {
                         startActivity(Intent(Intent.ACTION_SENDTO, Uri.fromParts("smsto", phone, null)).apply {
                             putExtra("sms_body", message)
@@ -60,7 +64,7 @@ class MainActivity : ComponentActivity() {
                     } catch (_: ActivityNotFoundException) {
                         Toast.makeText(this, "No SMS app installed", Toast.LENGTH_LONG).show()
                     }
-                })
+                }) }
             }
         }
     }
@@ -72,6 +76,9 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
     val campaigns = remember { mutableStateListOf<Campaign>().apply { addAll(store.loadCampaigns()) } }
     val appointments = remember { mutableStateListOf<Appointment>().apply { addAll(store.loadAppointments()) } }
     val jobs = remember { mutableStateListOf<JobRecord>().apply { addAll(store.loadJobs()) } }
+    var business by remember { mutableStateOf(store.loadBusinessProfile()) }
+    var launchLock by remember { mutableStateOf(store.isAppLockEnabled()) }
+    val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var page by remember { mutableStateOf("home") }
     var selectedId by remember { mutableStateOf("") }
@@ -88,17 +95,58 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
     var moneyInput by remember { mutableStateOf("") }
     var appError by remember { mutableStateOf("") }
     var lastBackupMessage by remember { mutableStateOf("") }
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
+    var backupAction by remember { mutableStateOf("") }
+    var backupPassword by remember { mutableStateOf("") }
+    var backupBusy by remember { mutableStateOf(false) }
+
+    val encryptedExport = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
         if (uri != null) {
-            runCatching {
-                context.contentResolver.openOutputStream(uri)?.use { out ->
-                    out.write(store.exportJson().toByteArray(Charsets.UTF_8))
-                } ?: error("Cannot open destination")
-            }.onSuccess { lastBackupMessage = "Backup saved. Treat the JSON as confidential." }
-             .onFailure { appError = "Backup export failed: ${it.message}" }
-        }
+            val chars = backupPassword.toCharArray()
+            backupPassword = ""
+            backupBusy = true
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openOutputStream(uri)?.use {
+                            BackupArchive.create(context, store, chars, it)
+                        } ?: error("Cannot open destination")
+                    }.also { chars.fill('\\u0000') }
+                }
+                backupBusy = false
+                result.onSuccess { lastBackupMessage = "Encrypted photo-inclusive backup saved. Keep the password safe." }
+                    .onFailure { appError = "Encrypted backup failed: " + it.message }
+            }
+        } else backupPassword = ""
+    }
+    val encryptedImport = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            val chars = backupPassword.toCharArray()
+            backupPassword = ""
+            backupBusy = true
+            scope.launch {
+                val result = withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openInputStream(uri)?.use {
+                            BackupArchive.restore(context, store, chars, it)
+                        } ?: error("Cannot open backup file")
+                    }.also { chars.fill('\\u0000') }
+                }
+                backupBusy = false
+                result.onSuccess {
+                    customers.clear(); customers.addAll(store.loadCustomers())
+                    campaigns.clear(); campaigns.addAll(store.loadCampaigns())
+                    appointments.clear(); appointments.addAll(store.loadAppointments())
+                    jobs.clear(); jobs.addAll(store.loadJobs())
+                    business = store.loadBusinessProfile()
+                    lastBackupMessage = "Encrypted backup restored with photos and financial records."
+                    appError = ""
+                }.onFailure { appError = "Backup restore failed: " + (it.message ?: "Incorrect password or damaged file") }
+            }
+        } else backupPassword = ""
     }
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -106,14 +154,14 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
         if (uri != null) {
             runCatching {
                 context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
-                    ?: error("Cannot open backup")
+                    ?: error("Cannot open legacy backup")
             }.onSuccess { importCandidate = it }
-             .onFailure { appError = "Backup could not be read: ${it.message}" }
+             .onFailure { appError = "Legacy backup could not be read: " + it.message }
         }
     }
 
     fun save() {
-        try { store.save(customers.toList(), campaigns.toList(), appointments.toList(), jobs.toList()); appError = "" }
+        try { store.save(customers.toList(), campaigns.toList(), appointments.toList(), jobs.toList(), business); appError = "" }
         catch (e: Exception) { appError = "Unable to save changes: ${e.message}" }
     }
     fun updateJob(job: JobRecord) {
@@ -203,9 +251,10 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
         ).isEmpty() && !LocalDate.parse(campaign.expiryDate).isBefore(LocalDate.now())
 
     val current = campaigns.firstOrNull { it.id == selectedId }
-    BackHandler(page !in setOf("home", "customers", "campaigns", "schedule", "map", "jobs")) {
+    BackHandler(page !in setOf("home", "customers", "campaigns", "schedule", "map", "jobs", "business")) {
         page = when (page) {
             "campaign_detail", "new_campaign" -> "campaigns"
+            "business" -> "home"
             else -> "customers"
         }
     }
@@ -238,6 +287,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         "edit_customer" -> "Edit customer"
                         "schedule" -> "Appointments"
                         "jobs" -> "Jobs & invoices"
+                        "business" -> "Business essentials"
                         "map" -> "Neighborhood map"
                         "campaigns" -> "Neighborhood campaigns"
                         "new_campaign" -> "New campaign"
@@ -261,14 +311,17 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                 "home" -> HomeScreen(customers, campaigns,
                     onCustomers = { page = "customers" }, onCampaigns = { page = "campaigns" },
                     onJobs = { page = "jobs" }, onSchedule = { page = "schedule" },
+                    onBusiness = { page = "business" },
                     jobs = jobs.toList(),
                     onNew = {
                         campaignZipFromMap = ""
                         campaignServiceFromMap = "House pressure washing"
                         page = "new_campaign"
                     },
-                    onExport = { exportLauncher.launch("RouteRevive-backup-${LocalDate.now()}.json") },
-                    onImport = { importLauncher.launch(arrayOf("application/json", "text/plain")) },
+                    onExport = { backupAction = "export"; backupPassword = "" },
+                    onImport = { backupAction = "import"; backupPassword = "" },
+                    onLegacyImport = { importLauncher.launch(arrayOf("application/json", "text/plain")) },
+                    backupBusy = backupBusy,
                     backupMessage = lastBackupMessage)
                 "customers" -> CustomerScreen(customers.toList(),
                     onAdd = { page = "new_customer" },
@@ -300,7 +353,17 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                     onAppointmentStatus = { a, status -> updateAppointmentStatus(a, status) },
                     onOpenSchedule = { page = "schedule" }
                 )
+                "business" -> BusinessScreen(business, customers.toList(), jobs.toList(),
+                    appointments.toList(), campaigns.toList(), launchLock,
+                    onSave = { business = it; save() },
+                    onAddCustomers = { list ->
+                        val known = customers.map { CampaignRules.digits(it.phone) }.toMutableSet()
+                        val safe = list.filter { !it.consent && known.add(CampaignRules.digits(it.phone)) }
+                        customers.addAll(safe); save()
+                    },
+                    onAppLock = { enabled -> store.setAppLockEnabled(enabled); launchLock = enabled })
                 "jobs" -> JobsScreen(appointments.toList(), customers.toList(), jobs.toList(),
+                    business = business,
                     onSaveJob = { updateJob(it) }, onOpenSchedule = { page = "schedule" })
                 "schedule" -> ScheduleScreen(customers.toList(), appointments.toList(),
                     onNew = { appointment ->
@@ -467,6 +530,36 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
         )
     }
 
+    if (backupAction.isNotBlank()) {
+        AlertDialog(onDismissRequest = { backupAction = ""; backupPassword = "" },
+            title = { Text(if (backupAction == "export") "Create full encrypted backup"
+                else "Restore full encrypted backup?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(if (backupAction == "export")
+                        "Includes all records and actual photo files. Use a strong password (10 or more characters). Keep it safe; it cannot be recovered."
+                    else "WARNING: Restoring will replace all customers, appointments, campaigns, jobs, financial records and business settings on this phone. Enter the archive's password to continue.")
+                    OutlinedTextField(value = backupPassword, onValueChange = { backupPassword = it },
+                        label = { Text("Backup password (minimum 10 characters)") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true, modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = backupPassword.length >= 10, onClick = {
+                    val action = backupAction
+                    backupAction = ""
+                    if (action == "export") encryptedExport.launch("RouteRevive-full-" +
+                        LocalDate.now().toString() + ".rrb")
+                    else encryptedImport.launch(arrayOf("application/octet-stream", "*/*"))
+                }) { Text(if (backupAction == "export") "Choose destination" else "Select backup & replace") }
+            },
+            dismissButton = { TextButton(onClick = { backupAction = ""; backupPassword = "" }) {
+                Text("Cancel")
+            } }
+        )
+    }
+
     if (importCandidate != null) {
         AlertDialog(onDismissRequest = { importCandidate = null },
             title = { Text("Replace local data from backup?") },
@@ -480,6 +573,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         campaigns.clear(); campaigns.addAll(store.loadCampaigns())
                         appointments.clear(); appointments.addAll(store.loadAppointments())
                         jobs.clear(); jobs.addAll(store.loadJobs())
+                        business = store.loadBusinessProfile()
                     }.onSuccess { lastBackupMessage = "Backup imported successfully"; appError = "" }
                      .onFailure { appError = "Import rejected: ${it.message}" }
                     importCandidate = null
@@ -511,7 +605,8 @@ private fun HomeScreen(customers: List<Customer>, campaigns: List<Campaign>,
                        jobs: List<JobRecord>,
                        onCustomers: () -> Unit, onCampaigns: () -> Unit, onNew: () -> Unit,
                        onJobs: () -> Unit, onSchedule: () -> Unit,
-                       onExport: () -> Unit, onImport: () -> Unit, backupMessage: String) {
+                       onExport: () -> Unit, onImport: () -> Unit, onLegacyImport: () -> Unit,
+                       onBusiness: () -> Unit, backupBusy: Boolean, backupMessage: String) {
     val paid = campaigns.sumOf { campaign -> campaign.recipients.sumOf { it.paidAmount } }
     val booked = campaigns.sumOf { CampaignRules.bookedSlots(it) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -541,22 +636,25 @@ private fun HomeScreen(customers: List<Customer>, campaigns: List<Campaign>,
             Spacer(Modifier.height(12.dp))
             OutlinedButton(onClick = onCustomers) { Text("Manage customers") }
             OutlinedButton(onClick = onJobs) { Text("Open jobs & invoices") }
+            OutlinedButton(onClick = onBusiness) { Text("Business profile, reporting & imports") }
             OutlinedButton(onClick = onSchedule) { Text("Manage appointment schedule") }
             TextButton(onClick = onCampaigns) { Text("View campaigns") }
         }
         InfoCard {
             Text("Back up your data", fontWeight = FontWeight.Bold, fontSize = 17.sp)
             Spacer(Modifier.height(6.dp))
-            Text("Export a local JSON backup of customer, campaign, appointment, job and payment records. Photo image files are NOT included. Back up your job photos separately before changing phones or uninstalling. The JSON contains private information; store it securely.",
+            Text("Create a password-encrypted full backup with records, before/after photos, logo, invoices and payments. Remember your password: it cannot be recovered. An existing legacy JSON backup can still be imported separately.",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
             Row {
-                OutlinedButton(onClick = onExport) { Text("Export") }
+                OutlinedButton(onClick = onExport, enabled = !backupBusy) { Text("Encrypted backup") }
                 Spacer(Modifier.width(10.dp))
-                OutlinedButton(onClick = onImport) { Text("Import") }
+                OutlinedButton(onClick = onImport, enabled = !backupBusy) { Text("Restore full backup") }
             }
+            TextButton(onClick = onLegacyImport, enabled = !backupBusy) { Text("Import older JSON (photos not included)") }
+            if (backupBusy) CircularProgressIndicator(modifier = Modifier.size(24.dp))
             if (backupMessage.isNotBlank()) Text(backupMessage, fontSize = 12.sp, color = Highlight)
         }
-        Text("V0.0.6 · Local-only MVP · No automatic texting, cloud sync or payment processing",
+        Text("V0.0.7 · Encrypted local records · No automatic texting or cloud payments",
             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
     }
 }
