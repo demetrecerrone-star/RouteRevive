@@ -298,6 +298,8 @@ class LocalStore(context: Context) {
                     dueDate = j.optString("dueDate"),
                     invoiceIssued = j.optBoolean("invoiceIssued"),
                     invoiceNumber = j.optString("invoiceNumber"),
+                    status = j.optString("status", "PLANNED"),
+                    statusUpdatedAt = j.optString("statusUpdatedAt"),
                     lineItems = (0 until itemArray.length()).map { n ->
                         val item = itemArray.getJSONObject(n)
                         JobLineItem(item.getString("description"), item.getDouble("quantity"),
@@ -430,6 +432,8 @@ class LocalStore(context: Context) {
                 put("payments", payments); put("dueDate", job.dueDate)
                 put("invoiceIssued", job.invoiceIssued)
                 put("invoiceNumber", job.invoiceNumber)
+                put("status", job.status)
+                put("statusUpdatedAt", job.statusUpdatedAt)
             })
         }
         val bp = JSONObject().apply {
