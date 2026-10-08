@@ -57,6 +57,8 @@ fun CustomerEditor(
     var zip by remember(customer.id) { mutableStateOf(customer.zip) }
     var service by remember(customer.id) { mutableStateOf(customer.service) }
     var address by remember(customer.id) { mutableStateOf(customer.address) }
+    var latitude by remember(customer.id) { mutableStateOf(customer.latitude?.toString() ?: "") }
+    var longitude by remember(customer.id) { mutableStateOf(customer.longitude?.toString() ?: "") }
     var notes by remember(customer.id) { mutableStateOf(customer.notes) }
     var date by remember(customer.id) { mutableStateOf(customer.lastService) }
     var price by remember(customer.id) { mutableStateOf(customer.lastPrice.toString()) }
@@ -70,7 +72,10 @@ fun CustomerEditor(
         CampaignRules.digits(phone).length in 10..15 && service.isNotBlank() &&
         ScheduleRules.validDate(date) && (price.toDoubleOrNull() ?: -1.0) >= 0 &&
         (!consent || (evidence.isNotBlank() && ScheduleRules.validDate(consentDate))) &&
-        address.length < 500 && notes.length < 4000
+        address.length < 500 && notes.length < 4000 &&
+        ((latitude.isBlank() && longitude.isBlank()) ||
+         (latitude.toDoubleOrNull()?.let { it.isFinite() && it in -90.0..90.0 } == true &&
+          longitude.toDoubleOrNull()?.let { it.isFinite() && it in -180.0..180.0 } == true))
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         ExtraField("Name", name) { name = it }
@@ -78,6 +83,10 @@ fun CustomerEditor(
         ExtraField("ZIP", zip, KeyboardType.Number) { zip = it }
         ExtraField("Service", service) { service = it }
         ExtraField("Street address (optional)", address) { address = it }
+        Text("Map location (optional). Use Neighborhoods → Locate to search an address, or enter coordinates manually.",
+            fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+        ExtraField("Latitude (optional, -90 to 90)", latitude, KeyboardType.Decimal) { latitude = it }
+        ExtraField("Longitude (optional, -180 to 180)", longitude, KeyboardType.Decimal) { longitude = it }
         ExtraField("Last completed service (YYYY-MM-DD)", date) { date = it }
         ExtraField("Previous service price ($)", price, KeyboardType.Decimal) { price = it }
         OutlinedTextField(value = notes, onValueChange = { if (it.length <= 4000) notes = it },
@@ -108,11 +117,16 @@ fun CustomerEditor(
             Text("Upcoming booking outside this calendar")
         }
         Button(onClick = {
+            val oldPinUnchanged = latitude == (customer.latitude?.toString() ?: "") &&
+                longitude == (customer.longitude?.toString() ?: "")
+            val clearPin = address.trim() != customer.address && oldPinUnchanged
             onSave(customer.copy(name = name.trim(), phone = phone.trim(), zip = zip.trim(),
                 service = service.trim(), address = address.trim(), notes = notes.trim(),
                 lastService = date, lastPrice = price.toDouble(),
                 consent = consent, consentEvidence = if (consent) evidence.trim() else "",
                 consentDate = if (consent) consentDate.trim() else "",
+                latitude = if (clearPin) null else latitude.toDoubleOrNull(),
+                longitude = if (clearPin) null else longitude.toDoubleOrNull(),
                 optedOut = markOptOut, issueOpen = issue, futureBooked = futureBooked))
         }, enabled = valid, modifier = Modifier.fillMaxWidth()) { Text("Save changes") }
         OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
