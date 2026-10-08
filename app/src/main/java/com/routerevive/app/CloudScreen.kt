@@ -331,11 +331,41 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
                             syncStatus = vault.lastSyncStatus()
                             syncTime = vault.lastSyncTime()
                         }) { Text("Refresh sync status") }
+                        CloudPanel("Automatic backup retention") {
+                            Text("Optional: keep the newest automatic snapshots. " +
+                                "Cleanup runs after a successful sync. Manual archives " +
+                                "are never deleted automatically.",
+                                fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                CloudRetentionRules.choices.forEach { keep ->
+                                    FilterChip(selected = retentionKeep == keep, onClick = {
+                                        runCatching {
+                                            vault.setRetentionKeep(keep)
+                                            retentionKeep = keep
+                                            message = if (keep == 0) "Keep all selected."
+                                                else "Keeping $keep newest automatic archives. " +
+                                                    "Cleanup runs after the next cloud sync."
+                                        }.onFailure { error = it.message ?: "Could not save retention." }
+                                    }, label = { Text(if (keep == 0) "All" else "$keep") })
+                                }
+                            }
+                            if (retentionKeep > 0) {
+                                OutlinedButton(enabled = !busy,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = { cleanupConfirm = true }) {
+                                    Text("Clean up older archives now")
+                                }
+                                Text("Other devices may rely on older archives. " +
+                                    "Create an offline backup before cleanup.",
+                                    fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
+                            }
+                        }
                         TextButton(enabled = !busy, onClick = {
                             runCatching {
                                 CloudBackupScheduler.stop(context)
                                 vault.disableAutomatic()
                                 autoEnabled = false
+                                retentionKeep = 0
                                 automaticPassword = ""
                                 message = "Automatic backups stopped. Cloud archives were not deleted."
                             }.onFailure { error = it.message ?: "Could not stop automatic backups." }
