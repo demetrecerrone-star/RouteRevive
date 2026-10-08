@@ -1,8 +1,8 @@
-# RouteRevive v0.2.0 — Optional private encrypted cloud backups
+# RouteRevive v0.2.1 — Automatic encrypted cloud backups and safe snapshot sync
 
 New in v0.2.0: the app can connect to a Supabase project, create/sign in to a business account using email/password, remember its session using Android Keystore-encrypted refresh credentials, upload new password-encrypted full backups (with job photos) to a private RLS-protected cloud bucket, list recent snapshots, and restore a chosen snapshot on another phone.
 
-**This is intentionally MANUAL encrypted backup and restore, not live synchronization.** Uploads occur only after choosing a separate archive password and explicitly pressing Upload. Cloud restores require a destructive replace confirmation. Offline local use continues unchanged. There is no live public booking endpoint, staff sharing, concurrent multi-device merging, background automatic uploading, or payment integration.
+**Manual encrypted backup/restore remains supported; v0.2.1 also introduces opt-in daily or weekly background encrypted snapshots and explicit import of newer snapshots on a second phone.** Imports require confirmation and are blocked when both devices have changed since their common snapshot. This is NOT real-time live synchronization or merge-capable team editing. Manual restores still require a destructive replace confirmation. Offline local use continues unchanged. There is no live public booking endpoint, staff sharing, concurrent multi-device merging, background automatic uploading, or payment integration.
 
 To connect it to a real cloud, the business must create its own Supabase project, run a secure private Storage bucket / user-UUID Row Level Security policy, and enter the **public** project URL + publishable/anon key in More → Private cloud backups. **Never enter a service_role or secret key.** Follow [Supabase setup instructions](docs/SUPABASE_SETUP.md) before using a cloud account. Until then, cloud features remain disconnected.
 
@@ -24,7 +24,7 @@ The Android build now targets **API 36** (required for new standard Android Goog
 
 **Beta/Google Play preparation:** Read [beta release checklist](docs/BETA_RELEASE_CHECKLIST.md), [privacy policy draft (not published)](docs/PRIVACY_POLICY_DRAFT.md), and [Play listing draft](docs/PLAY_STORE_BETA_DRAFT.md). A public HTTPS privacy policy, verified developer contact, Play Data safety answers, and account-specific testing still require owner action. A working APK is not Google Play approval.
 
-**Limitations:** No live public booking URL, remote accounts, cloud sync, automated SMS, payment processing, or real-traffic route optimization. The app is not suitable for uncontrolled broad use with real customer data until security, privacy and compliance review has been completed.
+**Limitations:** No live public booking URL, simultaneous edit/merge cloud sync, automated SMS, payment processing, or real-traffic route optimization. The app is not suitable for uncontrolled broad use with real customer data until security, privacy and compliance review has been completed.
 
 ---
 
@@ -108,7 +108,7 @@ New in v0.0.7:
 
 Old plaintext JSON exports can still be imported with the **Import older JSON** button, but do **not** contain original photo bytes. The new encrypted `.rrb` format is recommended. Exports are user-controlled documents; protect archive passwords and do not place them in shared drives or public repos. Temporary unencrypted ZIP data is generated only inside Android app-private cache and deleted after encryption/decryption.
 
-Photos are saved privately on the device; there is no cloud synchronization. A failed or incomplete image file will cause a full backup to fail instead of silently omitting photos. The restore validates file counts, size ceilings, names and all record references before replacing saved records. Retain your original backup until you confirm the restoration works.
+Photos remain private on the device; opt-in automatic encrypted snapshots include them, and explicit device imports can restore them. A failed or incomplete image file will cause a full backup to fail instead of silently omitting photos. The restore validates file counts, size ceilings, names and all record references before replacing saved records. Retain your original backup until you confirm the restoration works.
 
 No live payment processing, tax calculations, compliance guarantees or fully automated customer SMS. Device-side launch locking is not a substitute for a secure Android device and physical access controls.
 
@@ -244,3 +244,10 @@ GitHub Actions automatically runs unit tests and builds an APK whenever the main
 - Later: service-area maps, self-service booking pages, compliant opt-in SMS provider, subscription billing.
 
 **Do not contact real people until you have a legally suitable consent and privacy process in place.**
+
+
+## v0.2.1: Optional automatic cloud backups
+
+Go to More → Private cloud backups → section 4 after signing in. Select Daily or Weekly and enter a 10+ character shared **backup password**. It is protected with Android Keystore on this device, never sent to Supabase, and required on any other phone. A scheduled WorkManager job uploads an AES-GCM encrypted snapshot only when records have changed and it is safe to do so. The existing Supabase bucket SQL is unchanged.
+
+For a second phone, connect the same cloud account, enable automation with the SAME backup password, and select **Check & sync now**. If a newer cloud version exists, you must explicitly confirm replacing the data on that phone. Conflicting local changes cannot be merged automatically; export each device and choose a winner manually. Background work will NEVER silently replace locally edited records. Details: [Supabase setup](docs/SUPABASE_SETUP.md).

@@ -2,6 +2,8 @@ name: Android signed APK
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -49,11 +51,11 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: RouteRevive-v0.2.0-signed
+          name: RouteRevive-v0.2.1-signed
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
-          name: RouteRevive-v0.2.0-app-bundle
+          name: RouteRevive-v0.2.1-app-bundle
           path: app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error

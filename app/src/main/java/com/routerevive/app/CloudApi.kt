@@ -60,10 +60,16 @@ object CloudRules {
         require(validUser(id) && validName(name)) { "Invalid cloud backup identity." }
         return id + "/" + name
     }
-    fun newName(): String {
+    private const val AUTO_MARKER = "a170bac0"
+    fun isAutomaticName(name: String): Boolean = validName(name) &&
+        name.substringAfterLast("T").substringAfter("-").startsWith(AUTO_MARKER)
+
+    fun newName(automatic: Boolean = false): String {
         val timestamp = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss")
             .withZone(ZoneOffset.UTC).format(Instant.now())
-        return "backup-" + timestamp + "-" + UUID.randomUUID() + ".rrb"
+        val uuid = UUID.randomUUID().toString()
+        val id = if (automatic) AUTO_MARKER + uuid.substring(8) else uuid
+        return "backup-" + timestamp + "-" + id + ".rrb"
     }
 }
 
@@ -108,13 +114,19 @@ class CloudVault(context: Context) {
         val normalized = config.normalized()
         val editor = prefs.edit()
             .putString("url", normalized.url).putString("public_key", normalized.publicKey)
-        if (previous != normalized) editor.remove("auth")
+        if (previous != normalized) {
+            editor.remove("auth").remove("auto_password").remove("auto_hours")
+                .remove("sync_name").remove("sync_hash")
+        }
         check(editor.commit()) { "Failed to save cloud configuration." }
     }
 
     fun saveSession(session: CloudSession) {
         require(CloudRules.validUser(session.userId) &&
             session.refreshToken.isNotBlank()) { "Invalid cloud login session." }
+        if (storedIdentity()?.first?.let { it != session.userId } == true) {
+            disableAutomatic(clearBaseline = true)
+        }
         val data = JSONObject()
             .put("refresh_token", session.refreshToken)
             .put("user_id", session.userId)
@@ -136,8 +148,75 @@ class CloudVault(context: Context) {
             runCatching { JSONObject(open(encoded)).getString("refresh_token") }.getOrNull()
         }
 
+    fun automaticEnabled(): Boolean = storedIdentity() != null &&
+        prefs.contains("auto_password") && autoHours() > 0
+
+    fun autoHours(): Long = prefs.getLong("auto_hours", 0L).takeIf {
+        it == 24L || it == 168L
+    } ?: 0L
+
+    fun enableAutomatic(password: CharArray, intervalHours: Long) {
+        require(intervalHours == 24L || intervalHours == 168L)
+        require(password.size >= 10) { "Choose a backup password with at least 10 characters." }
+        require(storedIdentity() != null) { "Sign in first." }
+        check(prefs.edit().putString("auto_password", seal(String(password)))
+            .putLong("auto_hours", intervalHours).commit()) {
+            "Unable to save protected backup credentials."
+        }
+    }
+
+    fun automaticPassword(): CharArray? {
+        if (!automaticEnabled()) return null
+        return prefs.getString("auto_password", null)?.let { runCatching {
+            open(it).toCharArray()
+        }.getOrNull() }
+    }
+
+    fun disableAutomatic(clearBaseline: Boolean = false) {
+        val editor = prefs.edit().remove("auto_password").remove("auto_hours")
+        if (clearBaseline) editor.remove("sync_name").remove("sync_hash")
+        check(editor.commit()) { "Unable to disable automatic backups." }
+    }
+
+    fun syncBaseline(): Pair<String, String>? {
+        val name = prefs.getString("sync_name", null) ?: return null
+        val hash = prefs.getString("sync_hash", null) ?: return null
+        if (!CloudRules.isAutomaticName(name) || !hash.matches(Regex("[0-9a-f]{64}"))) return null
+        return name to hash
+    }
+
+    fun recordSynced(name: String, fingerprint: String) {
+        require(CloudRules.isAutomaticName(name) && fingerprint.matches(Regex("[0-9a-f]{64}")))
+        check(prefs.edit().putString("sync_name", name).putString("sync_hash", fingerprint)
+            .putLong("sync_success_at", System.currentTimeMillis())
+            .putString("sync_status", "Last cloud synchronization completed.").commit()) {
+            "Unable to record successful cloud synchronization."
+        }
+    }
+
+    fun recordSyncStatus(status: String) {
+        check(prefs.edit().putString("sync_status", status.take(180)).commit())
+    }
+
+    fun lastSyncStatus(): String = prefs.getString("sync_status", "").orEmpty()
+    fun lastSyncTime(): Long = prefs.getLong("sync_success_at", 0L)
+
+    fun clearSyncBaseline() {
+        check(prefs.edit().remove("sync_name").remove("sync_hash").commit())
+    }
+
     fun signOut() {
+        disableAutomatic(clearBaseline = true)
         check(prefs.edit().remove("auth").commit()) { "Sign out could not clear the session." }
+    }
+}
+
+/** Prevent simultaneous foreground/background refresh-token rotation in this process. */
+object CloudAuth {
+    @Synchronized
+    fun refresh(vault: CloudVault, settings: CloudSettings): CloudSession {
+        val token = vault.refreshToken() ?: error("Sign in to access private cloud backups.")
+        return SupabaseCloud(settings).refresh(token).also { vault.saveSession(it) }
     }
 }
 
@@ -274,6 +353,32 @@ class SupabaseCloud(private val settings: CloudSettings) {
             CloudBackupFile(name, obj.optJSONObject("metadata")?.optLong("size") ?: 0L,
                 obj.optString("created_at"))
         }
+    }
+
+    /** Paged listing is essential: older automatic snapshots must not be mistaken for none. */
+    fun latestAutomatic(session: CloudSession): CloudBackupFile? {
+        var offset = 0
+        while (offset < 2000) {
+            val response = request("POST", "/storage/v1/object/list/" + CloudRules.BUCKET,
+                bearer = session.accessToken,
+                json = JSONObject().put("prefix", session.userId + "/")
+                    .put("limit", 100).put("offset", offset)
+                    .put("sortBy", JSONObject().put("column", "created_at")
+                        .put("order", "desc")))
+            val rows = response.optJSONArray("items") ?: return null
+            for (i in 0 until rows.length()) {
+                val row = rows.optJSONObject(i) ?: continue
+                val name = row.optString("name")
+                if (CloudRules.isAutomaticName(name)) {
+                    return CloudBackupFile(name,
+                        row.optJSONObject("metadata")?.optLong("size") ?: 0L,
+                        row.optString("created_at"))
+                }
+            }
+            if (rows.length() < 100) return null
+            offset += 100
+        }
+        error("Cloud contains too many snapshots to determine the latest synchronized version safely.")
     }
 
     fun download(session: CloudSession, name: String, file: File) {
