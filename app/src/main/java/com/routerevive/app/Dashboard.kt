@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -27,6 +28,7 @@ fun DashboardScreen(
     onCustomers: () -> Unit, onJobs: () -> Unit,
     onSchedule: () -> Unit, onRequests: () -> Unit,
     onCampaigns: () -> Unit, onBusiness: () -> Unit,
+    onCloud: () -> Unit, onInsights: () -> Unit,
     onExport: () -> Unit, onImport: () -> Unit,
     onLegacyImport: () -> Unit,
     backupBusy: Boolean, backupMessage: String
@@ -38,10 +40,33 @@ fun DashboardScreen(
             runCatching { !LocalDate.parse(it.date).isBefore(now) }.getOrDefault(false)
     }.sortedWith(compareBy<Appointment> { it.date }.thenBy { it.time })
     val income = BusinessLogic.financials(jobs, appointments, now)
+    val cloudVault = CloudVault(LocalContext.current)
+    val health = CloudHealthRules.evaluate(
+        cloudVault.automaticEnabled(), cloudVault.lastSyncStatus(),
+        cloudVault.lastSyncTime(), cloudVault.autoHours())
+    val todayCount = appointments.count {
+        it.date == now.toString() && it.status in setOf("SCHEDULED", "IN_PROGRESS")
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(if (business.name.isBlank()) "Your business at a glance" else business.name,
             fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Text("BUSINESS PULSE  ·  " + now.toString(),
+            fontSize = 11.sp, fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary)
+        if (todayCount > 0 || income.overdue > 0.0) {
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(Modifier.fillMaxWidth().padding(13.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Needs your attention", fontWeight = FontWeight.Bold)
+                    if (todayCount > 0) Text("$todayCount appointment(s) today",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+                    if (income.overdue > 0.0) Text("$" +
+                        String.format(Locale.US, "%,.2f", income.overdue) + " overdue invoices",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
             DashboardMetric("Customers", customers.size.toString(), Modifier.weight(1f))
             DashboardMetric("Open requests", openRequests.toString(), Modifier.weight(1f))
@@ -66,6 +91,10 @@ fun DashboardScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
                     DashboardAction("Campaigns", onCampaigns, Modifier.weight(1f))
                     DashboardAction("Business", onBusiness, Modifier.weight(1f))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                    DashboardAction("Analytics", onInsights, Modifier.weight(1f))
+                    DashboardAction("Cloud", onCloud, Modifier.weight(1f))
                 }
             }
         }
@@ -118,6 +147,15 @@ fun DashboardScreen(
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
             Column(Modifier.fillMaxWidth().padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                Text("Cloud protection", fontWeight = FontWeight.Bold)
+                Text(health.title, fontWeight = FontWeight.SemiBold,
+                    color = if (health.state in listOf(CloudHealthState.ACTION_REQUIRED,
+                        CloudHealthState.STALE)) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.primary)
+                Text(health.detail, color = MaterialTheme.colorScheme.secondary,
+                    fontSize = 12.sp)
+                TextButton(onClick = onCloud) { Text("Manage private cloud backups") }
+                HorizontalDivider()
                 Text("Secure full backups", fontWeight = FontWeight.Bold)
                 Text("Save or restore records and photos with a password. Store the password securely.",
                     fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
@@ -133,7 +171,7 @@ fun DashboardScreen(
                     color = MaterialTheme.colorScheme.primary)
             }
         }
-        Text("v0.2.3 · Local-first · SMS reminders require manual sending",
+        Text("v0.2.4 · Local-first · SMS reminders require manual sending",
             color = MaterialTheme.colorScheme.secondary, fontSize = 11.sp)
         Spacer(Modifier.height(8.dp))
     }
