@@ -112,7 +112,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         context.contentResolver.openOutputStream(uri)?.use {
                             BackupArchive.create(context, store, chars, it)
                         } ?: error("Cannot open destination")
-                    }.also { chars.fill('\\u0000') }
+                    }.also { chars.fill(0.toChar()) }
                 }
                 backupBusy = false
                 result.onSuccess { lastBackupMessage = "Encrypted photo-inclusive backup saved. Keep the password safe." }
@@ -133,7 +133,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         context.contentResolver.openInputStream(uri)?.use {
                             BackupArchive.restore(context, store, chars, it)
                         } ?: error("Cannot open backup file")
-                    }.also { chars.fill('\\u0000') }
+                    }.also { chars.fill(0.toChar()) }
                 }
                 backupBusy = false
                 result.onSuccess {
