@@ -18,12 +18,15 @@ fun MoreScreen(
     business: BusinessProfile,
     onMap: () -> Unit, onRequests: () -> Unit,
     onCampaigns: () -> Unit, onBusiness: () -> Unit,
-    onBookingPage: () -> Unit
+    onBookingPage: () -> Unit,
+    onBeta: () -> Unit
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("YOUR BUSINESS TOOLS", color = MaterialTheme.colorScheme.primary,
             fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        MoreEntry("Beta readiness & privacy", "Local data health, release checklist and privacy details",
+            onClick = onBeta)
         MoreEntry("Neighborhood map", "Customer pins and smart route suggestions",
             onClick = onMap)
         MoreEntry("Booking requests", "Review and confirm customer inquiries",
