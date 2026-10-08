@@ -40,7 +40,7 @@ fun CloudScreen(store: LocalStore, onRestoreComplete: () -> Unit) {
 
     // Each operation refreshes the short-lived JWT and stores rotated refresh credentials.
     suspend fun currentSession(): CloudSession = withContext(Dispatchers.IO) {
-        val token = vault.refreshToken() ?: error("Sign in to access private cloud backups.")
+        val token = vault.refreshToken() ?: kotlin.error("Sign in to access private cloud backups.")
         val newSession = SupabaseCloud(settings).refresh(token)
         vault.saveSession(newSession)
         newSession
