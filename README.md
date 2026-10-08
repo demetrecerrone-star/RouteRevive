@@ -1,3 +1,14 @@
+## Version 0.0.5 — Smart Route Planning
+
+- The Map tab's **Opportunities & routes** view includes a daily route planner.
+- Scheduled and in-progress appointments appear in booked time order, with customer-by-customer navigation links.
+- An optional distance-first preview compares straight-line travel between mapped stops. It **does not** alter bookings or guarantee feasible arrival times. Reschedule explicitly before changing the order you drive.
+- On-map job colors indicate scheduled, in-progress, completed, cancelled, and other customers.
+- Start or complete work from the route panel; reschedule or cancel bookings from **Schedule**.
+- All updates retain the existing on-device data format. Upgrade from the permanently signed v0.0.4 without uninstalling.
+
+**Privacy:** Directions are opened only after confirmation; a third-party navigation app receives coordinates for the selected stop(s). No background customer geocoding or location tracking is introduced.
+
 # RouteRevive
 
 **Version 0.0.4 — Android MVP with neighborhood mapping (local-only)**
