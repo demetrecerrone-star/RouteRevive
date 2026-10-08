@@ -1,6 +1,13 @@
 package com.routerevive.app
 
 import android.content.Context
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.spec.GCMParameterSpec
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
@@ -122,8 +129,74 @@ object CampaignRules {
 
 class LocalStore(context: Context) {
     private val prefs = context.getSharedPreferences("routerevive_local_v1", Context.MODE_PRIVATE)
-    private fun data(): JSONObject =
-        runCatching { JSONObject(prefs.getString("db", "{}") ?: "{}") }.getOrElse { JSONObject() }
+    private val keyAlias = "route_revive_local_db_7"
+    private fun secretKey(): javax.crypto.SecretKey {
+        val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        val existing = store.getKey(keyAlias, null) as? javax.crypto.SecretKey
+        if (existing != null) return existing
+        val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+        generator.init(KeyGenParameterSpec.Builder(keyAlias,
+            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setKeySize(256)
+            .build())
+        return generator.generateKey()
+    }
+
+    private fun encryptDb(json: String): String {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey())
+        val bytes = cipher.iv + cipher.doFinal(json.toByteArray(Charsets.UTF_8))
+        return "RR7:" + Base64.encodeToString(bytes, Base64.NO_WRAP)
+    }
+
+    private fun readDb(): String {
+        val stored = prefs.getString("db", "{}") ?: "{}"
+        if (!stored.startsWith("RR7:")) return stored
+        val bytes = Base64.decode(stored.removePrefix("RR7:"), Base64.DEFAULT)
+        require(bytes.size >= 29) { "Encrypted local data is incomplete" }
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(128, bytes.copyOfRange(0, 12)))
+        return String(cipher.doFinal(bytes.copyOfRange(12, bytes.size)), Charsets.UTF_8)
+    }
+
+    private fun persistDb(json: String) {
+        val encrypted = encryptDb(json)
+        // Verify decryption BEFORE replacing previous data.
+        val bytes = Base64.decode(encrypted.removePrefix("RR7:"), Base64.DEFAULT)
+        val verifier = Cipher.getInstance("AES/GCM/NoPadding")
+        verifier.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(128, bytes.copyOfRange(0, 12)))
+        check(String(verifier.doFinal(bytes.copyOfRange(12, bytes.size)), Charsets.UTF_8) == json) {
+            "Local encryption verification failed"
+        }
+        check(prefs.edit().putString("db", encrypted).commit()) { "Unable to save encrypted data" }
+    }
+
+    init {
+        val old = prefs.getString("db", null)
+        if (old != null && !old.startsWith("RR7:")) {
+            // One-time migration; old data survives until encryption is verified.
+            persistDb(old)
+        }
+    }
+
+    private fun data(): JSONObject = JSONObject(readDb())
+
+    fun isAppLockEnabled(): Boolean = prefs.getBoolean("app_lock", false)
+    fun setAppLockEnabled(value: Boolean) {
+        check(prefs.edit().putBoolean("app_lock", value).commit())
+    }
+
+    fun loadBusinessProfile(): BusinessProfile {
+        val j = data().optJSONObject("businessProfile") ?: return BusinessProfile()
+        return BusinessProfile(
+            name = j.optString("name"), phone = j.optString("phone"),
+            email = j.optString("email"), address = j.optString("address"),
+            website = j.optString("website"), paymentTerms = j.optString("paymentTerms"),
+            logoFile = j.optString("logoFile")
+        )
+    }
 
     fun loadCustomers(): List<Customer> {
         val array = data().optJSONArray("customers") ?: return emptyList()
@@ -231,18 +304,18 @@ class LocalStore(context: Context) {
         }
     }
 
-    fun exportJson(): String = data().apply { put("schemaVersion", 4) }.toString(2)
+    fun exportJson(): String = data().apply { put("schemaVersion", 5) }.toString(2)
 
     fun importJson(payload: String) {
         val root = JSONObject(payload)
-        require(root.optInt("schemaVersion", 1) in 1..4) { "Unsupported backup version" }
+        require(root.optInt("schemaVersion", 1) in 1..5) { "Unsupported backup version" }
         require(root.optJSONArray("customers") != null && root.optJSONArray("campaigns") != null) {
             "Not a RouteRevive backup"
         }
         require(root.length() <= 12) { "Unexpected backup structure" }
         require(payload.length <= 5_000_000) { "Backup is too large" }
         val old = prefs.getString("db", "{}") ?: "{}"
-        check(prefs.edit().putString("db", root.toString()).commit()) { "Import failed to save" }
+        persistDb(root.toString())
         try {
             val parsedCustomers = loadCustomers()
             val parsedCampaigns = loadCampaigns()
@@ -262,7 +335,7 @@ class LocalStore(context: Context) {
         }
     }
 
-    fun save(customers: List<Customer>, campaigns: List<Campaign>, appointments: List<Appointment> = emptyList(), jobs: List<JobRecord> = emptyList()) {
+    fun save(customers: List<Customer>, campaigns: List<Campaign>, appointments: List<Appointment> = emptyList(), jobs: List<JobRecord> = emptyList(), business: BusinessProfile = BusinessProfile()) {
         val cs = JSONArray()
         customers.forEach { c ->
             cs.put(JSONObject().apply {
@@ -340,11 +413,17 @@ class LocalStore(context: Context) {
                 put("invoiceNumber", job.invoiceNumber)
             })
         }
-        // One atomic update: new data coexists with pre-v0.0.6 records.
-        check(prefs.edit().putString("db", JSONObject().put("schemaVersion", 4)
-            .put("customers", cs).put("campaigns", cps).put("appointments", aps)
-            .put("jobs", js).toString()).commit()) {
-            "Unable to save RouteRevive data"
+        val bp = JSONObject().apply {
+            put("name", business.name)
+            put("phone", business.phone)
+            put("email", business.email)
+            put("address", business.address)
+            put("website", business.website)
+            put("paymentTerms", business.paymentTerms)
+            put("logoFile", business.logoFile)
         }
+        persistDb(JSONObject().put("schemaVersion", 5)
+            .put("customers", cs).put("campaigns", cps).put("appointments", aps)
+            .put("jobs", js).put("businessProfile", bp).toString())
     }
 }
