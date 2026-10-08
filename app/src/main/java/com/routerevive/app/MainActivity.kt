@@ -74,6 +74,8 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
     val context = LocalContext.current
     var page by remember { mutableStateOf("home") }
     var selectedId by remember { mutableStateOf("") }
+    var campaignZipFromMap by remember { mutableStateOf("") }
+    var campaignServiceFromMap by remember { mutableStateOf("House pressure washing") }
     var editingCustomerId by remember { mutableStateOf("") }
     var bookingTime by remember { mutableStateOf("09:00") }
     var bookingDuration by remember { mutableStateOf("60") }
@@ -152,7 +154,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
         ).isEmpty() && !LocalDate.parse(campaign.expiryDate).isBefore(LocalDate.now())
 
     val current = campaigns.firstOrNull { it.id == selectedId }
-    BackHandler(page !in setOf("home", "customers", "campaigns", "schedule")) {
+    BackHandler(page !in setOf("home", "customers", "campaigns", "schedule", "map")) {
         page = when (page) {
             "campaign_detail", "new_campaign" -> "campaigns"
             else -> "customers"
@@ -164,6 +166,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
             listOf(Triple("home", "Overview", Icons.Default.Home),
                 Triple("customers", "Customers", Icons.Default.People),
                 Triple("schedule", "Schedule", Icons.Default.DateRange),
+                Triple("map", "Map", Icons.Default.Map),
                 Triple("campaigns", "Campaigns", Icons.Default.LocationOn)).forEach { (id, title, icon) ->
                 NavigationBarItem(
                     selected = page == id || (page == "campaign_detail" && id == "campaigns"),
@@ -185,6 +188,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         "new_customer" -> "Add customer"
                         "edit_customer" -> "Edit customer"
                         "schedule" -> "Appointments"
+                        "map" -> "Neighborhood map"
                         "campaigns" -> "Neighborhood campaigns"
                         "new_campaign" -> "New campaign"
                         "campaign_detail" -> current?.title ?: "Campaign"
@@ -206,7 +210,11 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
             when (page) {
                 "home" -> HomeScreen(customers, campaigns,
                     onCustomers = { page = "customers" }, onCampaigns = { page = "campaigns" },
-                    onNew = { page = "new_campaign" },
+                    onNew = {
+                        campaignZipFromMap = ""
+                        campaignServiceFromMap = "House pressure washing"
+                        page = "new_campaign"
+                    },
                     onExport = { exportLauncher.launch("RouteRevive-backup-${LocalDate.now()}.json") },
                     onImport = { importLauncher.launch(arrayOf("application/json", "text/plain")) },
                     backupMessage = lastBackupMessage)
@@ -224,6 +232,20 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         updateCustomer(it); page = "customers"
                     }, onCancel = { page = "customers" })
                 }
+                "map" -> NeighborhoodMapScreen(
+                    customers = customers.toList(), campaigns = campaigns.toList(),
+                    appointments = appointments.toList(),
+                    onSavePin = { id, latitude, longitude ->
+                        customers.firstOrNull { it.id == id }?.let {
+                            updateCustomer(it.copy(latitude = latitude, longitude = longitude))
+                        }
+                    },
+                    onStartCampaign = { zip, service ->
+                        campaignZipFromMap = zip
+                        campaignServiceFromMap = service
+                        page = "new_campaign"
+                    }
+                )
                 "schedule" -> ScheduleScreen(customers.toList(), appointments.toList(),
                     onNew = { appointment ->
                         if (!ScheduleRules.overlaps(appointment, appointments.toList())) {
@@ -249,10 +271,14 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         }
                     })
                 "campaigns" -> CampaignScreen(campaigns.toList(),
-                    onNew = { page = "new_campaign" },
+                    onNew = {
+                        campaignZipFromMap = ""
+                        campaignServiceFromMap = "House pressure washing"
+                        page = "new_campaign"
+                    },
                     onSelect = { selectedId = it; page = "campaign_detail" })
                 "new_campaign" -> NewCampaignScreen(customers.toList(), campaigns.toList(),
-                    appointments.toList(), onSave = {
+                    appointments.toList(), campaignZipFromMap, campaignServiceFromMap, onSave = {
                     campaigns.add(it); save(); selectedId = it.id; page = "campaign_detail"
                 })
                 "campaign_detail" -> if (current == null) {
@@ -558,6 +584,7 @@ private fun NewCustomerScreen(onSave: (Customer) -> Unit) {
     var phone by remember { mutableStateOf("") }
     var zip by remember { mutableStateOf("") }
     var service by remember { mutableStateOf("House pressure washing") }
+    var address by remember { mutableStateOf("") }
     var days by remember { mutableStateOf("220") }
     var price by remember { mutableStateOf("150") }
     var consent by remember { mutableStateOf(false) }
@@ -575,6 +602,7 @@ private fun NewCustomerScreen(onSave: (Customer) -> Unit) {
         Field("Customer name", name) { name = it }
         Field("Phone number", phone, KeyboardType.Phone) { phone = it }
         Field("5-digit ZIP code", zip, KeyboardType.Number) { zip = it }
+        Field("Street address (optional; for the map)", address) { address = it }
         Field("Previous service", service) { service = it }
         Field("Days since last service", days, KeyboardType.Number) { days = it }
         Field("Previous job amount (USD)", price, KeyboardType.Decimal) { price = it }
@@ -590,7 +618,7 @@ private fun NewCustomerScreen(onSave: (Customer) -> Unit) {
                 name = name.trim(), phone = phone.trim(), zip = zip.trim(), service = service.trim(),
                 lastService = LocalDate.now().minusDays(days.toLong()).toString(),
                 consent = consent, consentEvidence = if (consent) evidence.trim() else "",
-                lastPrice = price.toDouble()
+                lastPrice = price.toDouble(), address = address.trim()
             ))
         }, enabled = good, modifier = Modifier.fillMaxWidth()) { Text("Save customer") }
     }
@@ -628,11 +656,12 @@ private fun CampaignScreen(campaigns: List<Campaign>, onNew: () -> Unit, onSelec
 
 @Composable
 private fun NewCampaignScreen(customers: List<Customer>, campaigns: List<Campaign>,
-                              appointments: List<Appointment>, onSave: (Campaign) -> Unit) {
+                              appointments: List<Appointment>,
+                              initialZip: String, initialService: String, onSave: (Campaign) -> Unit) {
     var title by remember { mutableStateOf("Neighborhood repeat-service offer") }
     var business by remember { mutableStateOf("") }
-    var zip by remember { mutableStateOf("") }
-    var service by remember { mutableStateOf("House pressure washing") }
+    var zip by remember { mutableStateOf(initialZip) }
+    var service by remember { mutableStateOf(initialService) }
     var dateDays by remember { mutableStateOf("7") }
     var expiryDays by remember { mutableStateOf("5") }
     var price by remember { mutableStateOf("150") }
