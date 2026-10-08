@@ -139,7 +139,9 @@ fun ScheduleScreen(
     appointments: List<Appointment>,
     onNew: (Appointment) -> Unit,
     onStatus: (Appointment, String) -> Unit,
-    onReschedule: (Appointment) -> Unit
+    onReschedule: (Appointment) -> Unit,
+    onRemind: (Appointment) -> Unit,
+    onMarkReminded: (Appointment) -> Unit
 ) {
     var showNew by remember { mutableStateOf(false) }
     var rescheduling by remember { mutableStateOf<Appointment?>(null) }
@@ -187,6 +189,26 @@ fun ScheduleScreen(
                         Text("${a.durationMinutes} minutes · $${"%.2f".format(a.price)} · ${a.status}",
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
                         if (a.notes.isNotBlank()) Text(a.notes, fontSize = 12.sp)
+                        val reminderCustomer = customers.firstOrNull { it.id == a.customerId }
+                        if (a.status == "SCHEDULED" && reminderCustomer != null) {
+                            val canRemind = ReminderRules.canDraft(a, reminderCustomer)
+                            if (canRemind) {
+                                OutlinedButton(onClick = { onRemind(a) }) {
+                                    Text("Open SMS reminder draft")
+                                }
+                                if (!ReminderRules.sentToday(a)) {
+                                    TextButton(onClick = { onMarkReminded(a) }) {
+                                        Text("I sent the reminder")
+                                    }
+                                } else {
+                                    Text("Reminder manually recorded today",
+                                        color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
+                                }
+                            } else if (reminderCustomer.optedOut) {
+                                Text("SMS reminders blocked: customer opted out",
+                                    color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                            }
+                        }
                         if (a.status in setOf("SCHEDULED", "IN_PROGRESS")) {
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 if (a.status == "SCHEDULED") {
