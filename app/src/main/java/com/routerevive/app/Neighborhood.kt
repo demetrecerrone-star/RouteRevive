@@ -2,6 +2,7 @@ package com.routerevive.app
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.drawable.GradientDrawable
 import android.location.Geocoder
 import android.net.Uri
 import android.os.Handler
@@ -57,7 +58,7 @@ object NeighborhoodLogic {
             .filter { it.id != anchor.id && validPin(it) }
             .filter { candidate ->
                 val booked = appointments.any { a -> a.customerId == candidate.id &&
-                    a.status == "SCHEDULED" &&
+                    a.status in setOf("SCHEDULED", "IN_PROGRESS") &&
                     runCatching { !LocalDate.parse(a.date).isBefore(today) }.getOrDefault(false) }
                 val tested = candidate.copy(futureBooked = candidate.futureBooked || booked)
                 CampaignRules.reasons(tested, anchor.zip, anchor.service, today, customers, campaigns).isEmpty()
@@ -71,7 +72,7 @@ object NeighborhoodLogic {
     fun scheduledRoute(day: String, appointments: List<Appointment>,
                        customers: List<Customer>): List<Pair<Appointment, Customer>> =
         appointments.asSequence()
-            .filter { it.date == day && it.status == "SCHEDULED" }
+            .filter { it.date == day && it.status in setOf("SCHEDULED", "IN_PROGRESS") }
             .sortedBy { it.time }
             .mapNotNull { a ->
                 customers.firstOrNull { it.id == a.customerId && validPin(it) }?.let { a to it }
@@ -94,7 +95,19 @@ object NeighborhoodLogic {
             .appendQueryParameter("travelmode", "driving")
             .build()
     }
+
+    fun stopDirections(customer: Customer): Uri? {
+        if (!validPin(customer)) return null
+        return Uri.Builder().scheme("https").authority("www.google.com")
+            .appendPath("maps").appendPath("dir")
+            .appendQueryParameter("api", "1")
+            .appendQueryParameter("destination", "${customer.latitude},${customer.longitude}")
+            .appendQueryParameter("travelmode", "driving")
+            .build()
+    }
 }
+
+private fun viewScale(context: Context): Float = context.resources.displayMetrics.density
 
 private data class PinProposal(val customerId: String, val latitude: Double,
                                val longitude: Double, val address: String)
@@ -106,7 +119,9 @@ fun NeighborhoodMapScreen(
     campaigns: List<Campaign>,
     appointments: List<Appointment>,
     onSavePin: (String, Double, Double) -> Unit,
-    onStartCampaign: (String, String) -> Unit
+    onStartCampaign: (String, String) -> Unit,
+    onAppointmentStatus: (Appointment, String) -> Unit,
+    onOpenSchedule: () -> Unit
 ) {
     val context = LocalContext.current
     val pins = customers.filter(NeighborhoodLogic::validPin)
@@ -117,6 +132,8 @@ fun NeighborhoodMapScreen(
     var pinProposal by remember { mutableStateOf<PinProposal?>(null) }
     var error by remember { mutableStateOf("") }
     var showDirectionsConfirm by remember { mutableStateOf(false) }
+    var showDistancePreview by remember { mutableStateOf(false) }
+    var navigateToCustomer by remember { mutableStateOf<Customer?>(null) }
     var anchorDropdown by remember { mutableStateOf(false) }
     var mapView by remember { mutableStateOf<MapView?>(null) }
     val anchor = customers.firstOrNull { it.id == anchorId && NeighborhoodLogic.validPin(it) }
@@ -126,6 +143,12 @@ fun NeighborhoodMapScreen(
             radiusMiles.toDouble(), LocalDate.now())
     } ?: emptyList()
     val route = NeighborhoodLogic.scheduledRoute(routeDate, appointments, customers)
+    val suggested = RoutePlannerLogic.distanceFirstPreview(route)
+    val routeToDraw = if (showDistancePreview) suggested else route
+    val unmappedScheduled = appointments.count { a ->
+        a.date == routeDate && a.status in setOf("SCHEDULED", "IN_PROGRESS") &&
+            customers.none { it.id == a.customerId && NeighborhoodLogic.validPin(it) }
+    }
     val missing = customers.filter { !NeighborhoodLogic.validPin(it) && it.address.isNotBlank() }
 
     // A map must never be nested in a vertical scrolling container:
@@ -135,22 +158,39 @@ fun NeighborhoodMapScreen(
     // Repaint overlays only after actual pin/route changes, not whenever slider,
     // text field or nearby-customer data recomposes. This avoids map flicker and
     // native info-window/marker jumps during a gesture.
-    LaunchedEffect(mapView, pins, route) {
+    LaunchedEffect(mapView, pins, routeToDraw, appointments, routeDate) {
         val map = mapView ?: return@LaunchedEffect
         map.overlays.clear()
         pins.forEach { customer ->
             map.overlays.add(Marker(map).apply {
                 position = GeoPoint(customer.latitude!!, customer.longitude!!)
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                title = customer.name
+                val markerStatus = RoutePlannerLogic.markerStatus(customer.id, routeDate, appointments)
+                title = "${customer.name} · ${markerStatus.replace('_', ' ')}"
                 snippet = customer.service
+                val markerColor = when (markerStatus) {
+                    "IN_PROGRESS" -> android.graphics.Color.rgb(251, 191, 36)
+                    "SCHEDULED" -> android.graphics.Color.rgb(96, 165, 250)
+                    "COMPLETED" -> android.graphics.Color.rgb(74, 222, 128)
+                    "CANCELLED" -> android.graphics.Color.rgb(148, 163, 184)
+                    else -> android.graphics.Color.rgb(192, 132, 252)
+                }
+                val pinSize = (viewScale(map.context) * 24).toInt()
+                setIcon(GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(markerColor)
+                    setStroke((viewScale(map.context) * 3).toInt().coerceAtLeast(2),
+                        android.graphics.Color.WHITE)
+                    setSize(pinSize, pinSize)
+                })
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                 setOnMarkerClickListener { marker, _ ->
                     marker.showInfoWindow()
                     true
                 }
             })
         }
-        val points = route.map { (_, customer) ->
+        val points = routeToDraw.map { (_, customer) ->
             GeoPoint(customer.latitude!!, customer.longitude!!)
         }
         if (points.size >= 2) {
@@ -301,7 +341,7 @@ fun NeighborhoodMapScreen(
         }
 
         HorizontalDivider()
-        Text("SCHEDULED APPOINTMENT ROUTE", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        Text("SMART DAILY ROUTE PLANNER", fontWeight = FontWeight.Bold, fontSize = 13.sp)
         OutlinedTextField(value = routeDate, onValueChange = { routeDate = it },
             label = { Text("Service date (YYYY-MM-DD)") }, singleLine = true,
             modifier = Modifier.fillMaxWidth())
@@ -309,23 +349,68 @@ fun NeighborhoodMapScreen(
             Text("Enter a valid date.", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
         } else {
             if (route.isEmpty()) {
-                Text("No mapped appointments on this date.", fontSize = 13.sp)
+                Text("No active mapped appointments on this date.", fontSize = 13.sp)
             } else {
-                route.forEachIndexed { index, (appointment, customer) ->
-                    Text("${index + 1}. ${appointment.time} · ${customer.name} · ${appointment.service}",
-                        fontSize = 13.sp)
+                val chronologicalMiles = RoutePlannerLogic.straightLineMiles(route)
+                val suggestedMiles = RoutePlannerLogic.straightLineMiles(suggested)
+                Text("Booked order: ${"%.1f".format(Locale.US, chronologicalMiles)} miles between pins (straight line)",
+                    fontSize = 12.sp)
+                if (route.size >= 3) {
+                    Text("Distance-first preview: ${"%.1f".format(Locale.US, suggestedMiles)} miles between pins",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = showDistancePreview, onCheckedChange = { showDistancePreview = it })
+                        Text("Preview distance-first order on map", fontSize = 12.sp)
+                    }
+                    Text("Distance-first ordering is a suggestion ONLY. It can conflict with booked times; appointments are never automatically rearranged. Reschedule first before driving a different order.",
+                        fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+                }
+                val displayRoute = if (showDistancePreview) suggested else route
+                displayRoute.forEachIndexed { index, (appointment, customer) ->
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                        Column(Modifier.fillMaxWidth().padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("${index + 1}. ${appointment.time} · ${customer.name}",
+                                fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text("${appointment.service} · ${appointment.status.replace('_', ' ')}",
+                                fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+                            Row(horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                TextButton(onClick = { navigateToCustomer = customer }) { Text("Navigate") }
+                                if (appointment.status == "SCHEDULED") {
+                                    TextButton(onClick = { onAppointmentStatus(appointment, "IN_PROGRESS") }) {
+                                        Text("Start")
+                                    }
+                                }
+                                if (appointment.status in setOf("SCHEDULED", "IN_PROGRESS")) {
+                                    TextButton(onClick = { onAppointmentStatus(appointment, "COMPLETED") }) {
+                                        Text("Complete")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (route.size >= 2) Button(onClick = { showDirectionsConfirm = true },
+                    modifier = Modifier.fillMaxWidth()) {
+                    Text("Directions in BOOKED order (${min(route.size, 8)} stops)")
+                }
+                if (route.size > 8) Text("Directions include only the first eight booked stops.",
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+                RoutePlannerLogic.nextStop(route)?.let { (_, customer) ->
+                    OutlinedButton(onClick = { navigateToCustomer = customer },
+                        modifier = Modifier.fillMaxWidth()) { Text("Navigate to next booked job: ${customer.name}") }
                 }
             }
-            if (route.size >= 2) Button(onClick = { showDirectionsConfirm = true },
-                modifier = Modifier.fillMaxWidth()) {
-                Text("Open driving directions (${min(route.size, 8)} stops)")
-            }
-            if (route.size > 8) {
-                Text("Only the first eight stops are sent to navigation. Divide longer routes into groups.",
-                    fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+            if (unmappedScheduled > 0) Text("$unmappedScheduled active appointment(s) have no saved map pin. Add their locations before relying on this route.",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+            OutlinedButton(onClick = onOpenSchedule, modifier = Modifier.fillMaxWidth()) {
+                Text("Open schedule to reschedule or cancel jobs")
             }
         }
-        Text("Appointments remain in their scheduled time order. The map connects pins with straight lines; road routing and driving times are calculated by the navigation app.",
+        Text("Blue: scheduled · Yellow: in progress · Green: completed · Gray: cancelled · Purple: customer",
+            fontSize = 11.sp, color = MaterialTheme.colorScheme.secondary)
+        Text("Distances and drawn map lines are straight-line estimates, NOT driving distances or arrival times. Check traffic, appointment windows, and directions in your navigation app.",
             color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp)
 
         HorizontalDivider()
@@ -387,10 +472,24 @@ fun NeighborhoodMapScreen(
             }) { Text("Save pin") } },
             dismissButton = { TextButton(onClick = { pinProposal = null }) { Text("Cancel") } })
     }
+    navigateToCustomer?.let { customer ->
+        AlertDialog(onDismissRequest = { navigateToCustomer = null },
+            title = { Text("Open navigation?") },
+            text = { Text("Share the saved map location for ${customer.name} with your maps app? Check the address before driving.") },
+            confirmButton = { TextButton(onClick = {
+                navigateToCustomer = null
+                NeighborhoodLogic.stopDirections(customer)?.let { url ->
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, url)) }
+                        .onFailure { error = "No app can open navigation." }
+                }
+            }) { Text("Open navigation") } },
+            dismissButton = { TextButton(onClick = { navigateToCustomer = null }) { Text("Cancel") } })
+    }
+
     if (showDirectionsConfirm) {
         AlertDialog(onDismissRequest = { showDirectionsConfirm = false },
             title = { Text("Share route with Google Maps?") },
-            text = { Text("The stop coordinates for this route will be opened in Google Maps. The app does not upload phone numbers or notes. Review directions and appointment times before driving.") },
+            text = { Text("Booked-order stop coordinates will open in Google Maps. No phone numbers or notes are shared. Check traffic, travel times and all appointment windows before driving.") },
             confirmButton = { TextButton(onClick = {
                 showDirectionsConfirm = false
                 NeighborhoodLogic.drivingDirections(route.map { it.second })?.let { url ->
