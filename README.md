@@ -2,14 +2,28 @@
 
 **Version 0.0.2 — Android MVP (local-only)**
 
+## APK signing setup (required for future in-place updates)
+
+This repository now expects a private persistent signing key for published APKs. The key must **never** be committed to this public repository. A one-time setup is required:
+
+1. Generate or retain the owner's private PKCS12 signing key and password in a secure offline backup.
+2. Base64-encode the PKCS12 keystore and add a repository Actions secret named `RR_KEYSTORE_BASE64`.
+3. Add the matching password under `RR_STORE_PASSWORD`.
+4. The GitHub workflow runs tests and creates an APK signed with this key. Use the **RouteRevive-v0.0.2-signed** artifact from a successful run.
+5. For every update, reuse the **same secrets**, increment `versionCode`, and keep the Android `applicationId` unchanged.
+
+**The previous v0.0.1 and v0.0.2 debug APKs used ephemeral signing keys.** These APKs are not directly upgradable to this new permanent signature. If no important data exists, uninstall the debug APK before installing the newly signed v0.0.2 release once. That creates the stable update path going forward.
+
+
+
 RouteRevive helps local pressure-washing and service businesses recontact previous customers and track neighborhood repeat-service offers, without automated bulk messaging.
 
 ## Download the Android APK
 
-1. Open [the Android build history](https://github.com/demetrecerrone-star/RouteRevive/actions/workflows/android.yml).
-2. Under **Artifacts**, choose **RouteRevive-v0.0.2-debug** (sign into GitHub if prompted).
+1. Once signing secrets are configured, open [the Android build history](https://github.com/demetrecerrone-star/RouteRevive/actions/workflows/android.yml).
+2. Under **Artifacts**, choose **RouteRevive-v0.0.2-signed** (sign into GitHub if prompted).
 3. Download and unzip the artifact, then install `app-debug.apk` on Android 8.0 or newer.
-4. This is a development APK, **not a Google Play production release**. Android may ask you to allow installation from your files app. Install only if you trust your own repository's build.
+4. This is a privately signed testing release, **not yet a Google Play production release**. Android may ask you to allow installation from your files app. Install only if you trust your own repository's build.
 
 GitHub Actions automatically runs unit tests and builds an APK whenever the main branch changes. Debug APKs built on separate runners may use different signing keys and require uninstalling the prior test version; uninstalling deletes locally stored records. Stable release signing and export/backups must be added before using live business data.
 
