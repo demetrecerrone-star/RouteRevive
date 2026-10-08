@@ -8,6 +8,9 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -67,17 +70,47 @@ class MainActivity : ComponentActivity() {
 private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
     val customers = remember { mutableStateListOf<Customer>().apply { addAll(store.loadCustomers()) } }
     val campaigns = remember { mutableStateListOf<Campaign>().apply { addAll(store.loadCampaigns()) } }
+    val appointments = remember { mutableStateListOf<Appointment>().apply { addAll(store.loadAppointments()) } }
+    val context = LocalContext.current
     var page by remember { mutableStateOf("home") }
     var selectedId by remember { mutableStateOf("") }
+    var editingCustomerId by remember { mutableStateOf("") }
+    var bookingTime by remember { mutableStateOf("09:00") }
+    var bookingDuration by remember { mutableStateOf("60") }
+    var importCandidate by remember { mutableStateOf<String?>(null) }
     var editorCustomer by remember { mutableStateOf<String?>(null) }
     var editorRecipient by remember { mutableStateOf<String?>(null) }
     var messageDraft by remember { mutableStateOf("") }
     var moneyDialog by remember { mutableStateOf<Pair<String, String>?>(null) }
     var moneyInput by remember { mutableStateOf("") }
     var appError by remember { mutableStateOf("") }
+    var lastBackupMessage by remember { mutableStateOf("") }
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(store.exportJson().toByteArray(Charsets.UTF_8))
+                } ?: error("Cannot open destination")
+            }.onSuccess { lastBackupMessage = "Backup saved. Treat the JSON as confidential." }
+             .onFailure { appError = "Backup export failed: ${it.message}" }
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    ?: error("Cannot open backup")
+            }.onSuccess { importCandidate = it }
+             .onFailure { appError = "Backup could not be read: ${it.message}" }
+        }
+    }
 
     fun save() {
-        try { store.save(customers.toList(), campaigns.toList()); appError = "" }
+        try { store.save(customers.toList(), campaigns.toList(), appointments.toList()); appError = "" }
         catch (e: Exception) { appError = "Unable to save changes: ${e.message}" }
     }
     fun updateCustomer(c: Customer) {
@@ -98,14 +131,18 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
         ).isEmpty() && !LocalDate.parse(campaign.expiryDate).isBefore(LocalDate.now())
 
     val current = campaigns.firstOrNull { it.id == selectedId }
-    BackHandler(page !in setOf("home", "customers", "campaigns")) {
-        page = if (page == "campaign_detail" || page == "new_campaign") "campaigns" else "customers"
+    BackHandler(page !in setOf("home", "customers", "campaigns", "schedule")) {
+        page = when (page) {
+            "campaign_detail", "new_campaign" -> "campaigns"
+            else -> "customers"
+        }
     }
 
     Scaffold(containerColor = Ink, bottomBar = {
         NavigationBar(containerColor = Panel) {
             listOf(Triple("home", "Overview", Icons.Default.Home),
                 Triple("customers", "Customers", Icons.Default.People),
+                Triple("schedule", "Schedule", Icons.Default.DateRange),
                 Triple("campaigns", "Campaigns", Icons.Default.LocationOn)).forEach { (id, title, icon) ->
                 NavigationBarItem(
                     selected = page == id || (page == "campaign_detail" && id == "campaigns"),
@@ -125,6 +162,8 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         "home" -> "Your business, reconnected"
                         "customers" -> "Customer records"
                         "new_customer" -> "Add customer"
+                        "edit_customer" -> "Edit customer"
+                        "schedule" -> "Appointments"
                         "campaigns" -> "Neighborhood campaigns"
                         "new_campaign" -> "New campaign"
                         "campaign_detail" -> current?.title ?: "Campaign"
