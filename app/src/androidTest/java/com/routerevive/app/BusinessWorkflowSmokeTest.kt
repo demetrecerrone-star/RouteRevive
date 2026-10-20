@@ -39,6 +39,12 @@ class BusinessWorkflowSmokeTest {
 
     private fun button(text: String) = compose.onNode(hasText(text) and hasClickAction())
     private fun tap(text: String) {
+        val matcher = hasText(text) and hasClickAction()
+        // Lazy lists do not compose distant rows. Scroll the list to create the
+        // target before trying the descendant's ordinary scroll action.
+        if (compose.onAllNodes(matcher).fetchSemanticsNodes().isEmpty()) {
+            compose.onNode(hasScrollToIndexAction()).performScrollToNode(matcher)
+        }
         val node = button(text)
         try { node.assertIsDisplayed() } catch (_: AssertionError) { node.performScrollTo() }
         node.performClick()
@@ -87,12 +93,18 @@ class BusinessWorkflowSmokeTest {
         button("Create draft neighborhood offer").assertIsNotEnabled()
         compose.onNodeWithText("Below your margin target").assertExists()
         fill("Proposed discount %", "10")
-        compose.onNodeWithText("3. Compare your offer").performScrollTo()
+        scenario!!.onActivity { activity ->
+            val keyboard = activity.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            keyboard.hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
+            activity.currentFocus?.clearFocus()
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText("$128.58").performScrollTo()
         screenshot("08_profit_comparison")
         shell("settings put system font_scale 1.5")
         scenario!!.recreate()
         compose.waitForIdle()
-        compose.onNodeWithText("Minimum price for 30% margin").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("$128.58").performScrollTo().assertIsDisplayed()
         screenshot("09_profit_large_text")
         tap("Create draft neighborhood offer")
         val store = LocalStore(context)
@@ -118,6 +130,7 @@ class BusinessWorkflowSmokeTest {
         assertEquals("10:00", booked.time)
         assertEquals(75, booked.durationMinutes)
         assertEquals(135.0, booked.price, 0.001)
+        screenshot("11_profit_booking")
     }
 
     @Test fun newCustomerUsesActualServiceAndPermissionDates() {
