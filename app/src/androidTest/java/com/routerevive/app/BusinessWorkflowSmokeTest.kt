@@ -2,7 +2,6 @@ package com.routerevive.app
 
 import android.content.Context
 import android.content.pm.ActivityInfo
-import android.graphics.Bitmap
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -14,7 +13,6 @@ import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
 import java.io.FileInputStream
 import java.time.LocalDate
 
@@ -52,11 +50,10 @@ class BusinessWorkflowSmokeTest {
     }
     private fun screenshot(name: String) {
         compose.waitForIdle()
-        val image = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-        assertNotNull("Screenshot should be available", image)
-        val folder = File(context.getExternalFilesDir(null), "smoke-screens").apply { mkdirs() }
-        File(folder, "$name.png").outputStream().use { image!!.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        image?.recycle()
+        // Connected tests uninstall the app afterward, including its external-files directory.
+        // The dedicated device's Downloads folder survives until CI collects the evidence.
+        shell("mkdir -p /sdcard/Download/routerevive-smoke")
+        shell("screencap -p /sdcard/Download/routerevive-smoke/$name.png")
     }
     private fun shell(command: String) {
         InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(command).use { fd ->

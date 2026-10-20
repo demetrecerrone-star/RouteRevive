@@ -50,7 +50,7 @@ With a test device/emulator connected:
 ./gradlew connectedDebugAndroidTest
 ```
 
-The Android smoke suite seeds fictional records in its test installation. It covers building/reviewing/booking an offer, completion and one-ledger payment reporting, nested job back navigation, focused search → More, large system text and rotation. Screenshots are written to the test app's `smoke-screens` directory. `scripts/android-smoke.sh` runs the suite and collects screenshots/logs for CI.
+The Android smoke suite seeds fictional records in its test installation. It covers building/reviewing/booking an offer, completion and one-ledger payment reporting, nested job back navigation, focused search → More, large system text and rotation. Screenshots are written to the test device's `Download/routerevive-smoke` directory so they survive the connected-test app uninstall. `scripts/android-smoke.sh` runs the suite and collects screenshots/logs for CI.
 
 Unit regression cases cover failed persistence/retry, cross-record consistency, capacity and scheduling conflicts, non-finite/fractional amounts, partial/full receipts, opt-outs, repeat eligibility, legacy campaign money and request confirmation.
 
