@@ -92,7 +92,7 @@ fun CustomerEditor(
             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
         ExtraField("Latitude (optional, -90 to 90)", latitude, KeyboardType.Decimal) { latitude = it }
         ExtraField("Longitude (optional, -180 to 180)", longitude, KeyboardType.Decimal) { longitude = it }
-        ExtraField("Last completed service (YYYY-MM-DD)", date) { date = it }
+        DateInput("Last completed service", date, { date = it }, maxDate = LocalDate.now())
         ExtraField("Previous service price ($)", price, KeyboardType.Decimal) { price = it }
         OutlinedTextField(value = notes, onValueChange = { if (it.length <= 4000) notes = it },
             label = { Text("Customer notes") }, minLines = 3, modifier = Modifier.fillMaxWidth())
@@ -104,7 +104,7 @@ fun CustomerEditor(
         }
         if (consent) {
             ExtraField("Consent evidence / source", evidence) { evidence = it }
-            ExtraField("Consent date (YYYY-MM-DD)", consentDate) { consentDate = it }
+            DateInput("Permission date", consentDate, { consentDate = it }, maxDate = LocalDate.now())
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = markOptOut, onCheckedChange = { if (it) markOptOut = true },

@@ -503,39 +503,47 @@ private fun NewCustomerScreen(onSave: (Customer) -> Unit) {
     var zip by rememberSaveable { mutableStateOf("") }
     var service by rememberSaveable { mutableStateOf("House pressure washing") }
     var address by rememberSaveable { mutableStateOf("") }
-    var days by rememberSaveable { mutableStateOf("220") }
-    var price by rememberSaveable { mutableStateOf("150") }
+    var lastService by rememberSaveable { mutableStateOf("") }
+    var price by rememberSaveable { mutableStateOf("") }
     var consent by rememberSaveable { mutableStateOf(false) }
     var evidence by rememberSaveable { mutableStateOf("") }
+    var consentDate by rememberSaveable { mutableStateOf("") }
+    val today = LocalDate.now()
+    fun validPastDate(value: String) = runCatching { !LocalDate.parse(value).isAfter(today) }.getOrDefault(false)
     val good = name.isNotBlank() && zip.matches(Regex("\\d{5}")) &&
         CampaignRules.digits(phone).length in 10..15 && service.isNotBlank() &&
-        (days.toLongOrNull() ?: -1) in 0..36500 &&
+        validPastDate(lastService) &&
         WorkspaceRules.validMoney(price.toDoubleOrNull() ?: -1.0) &&
-        (!consent || evidence.isNotBlank())
+        (!consent || (evidence.isNotBlank() && validPastDate(consentDate)))
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Add an actual customer record. No contact is sent from this form.",
-            color = MaterialTheme.colorScheme.secondary)
+        Text("Start with a past service", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("Use the actual service date so repeat-service suggestions arrive at the right time.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         Field("Customer name", name) { name = it }
         Field("Phone number", phone, KeyboardType.Phone) { phone = it }
         Field("5-digit ZIP code", zip, KeyboardType.Number) { zip = it }
         Field("Street address (optional; for the map)", address) { address = it }
         Field("Previous service", service) { service = it }
-        Field("Days since last service", days, KeyboardType.Number) { days = it }
+        DateInput("Last completed service", lastService, { lastService = it }, maxDate = today)
         Field("Previous job amount (USD)", price, KeyboardType.Decimal) { price = it }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = consent, onCheckedChange = { consent = it })
             Text("I have documented permission to send promotional SMS to this customer.", fontSize = 13.sp)
         }
-        if (consent) Field("Permission source, date, and evidence", evidence) { evidence = it }
+        if (consent) {
+            Field("Permission source and evidence", evidence) { evidence = it }
+            DateInput("Permission date", consentDate, { consentDate = it }, maxDate = today)
+        }
         Text("Do not claim permission unless you can substantiate it. Mark opt-outs in the customer list.",
             color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp)
         Button(onClick = {
             onSave(Customer(
                 name = name.trim(), phone = phone.trim(), zip = zip.trim(), service = service.trim(),
-                lastService = LocalDate.now().minusDays(days.toLong()).toString(),
+                lastService = lastService,
                 consent = consent, consentEvidence = if (consent) evidence.trim() else "",
+                consentDate = if (consent) consentDate else "",
                 lastPrice = price.toDouble(), address = address.trim()
             ))
         }, enabled = good, modifier = Modifier.fillMaxWidth()) { Text("Save customer") }

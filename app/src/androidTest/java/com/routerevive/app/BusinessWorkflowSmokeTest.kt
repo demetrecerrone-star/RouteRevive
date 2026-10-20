@@ -70,6 +70,33 @@ class BusinessWorkflowSmokeTest {
         shell("settings put system font_scale 1.0")
     }
 
+    @Test fun newCustomerUsesActualServiceAndPermissionDates() {
+        launch(base().copy(customers = emptyList()))
+        navigate("customers")
+        tap("Add customer")
+        fun fill(label: String, value: String) {
+            compose.onNode(hasText(label) and hasSetTextAction()).performScrollTo().performTextReplacement(value)
+        }
+        fill("Customer name", "Jordan Example")
+        fill("Phone number", "6125550194")
+        fill("5-digit ZIP code", "56425")
+        fill("Previous job amount (USD)", "85.50")
+        button("Save customer").assertIsNotEnabled()
+        fill("Last completed service", today.minusDays(220).toString())
+        compose.onNode(isToggleable()).performScrollTo().performClick()
+        fill("Permission source and evidence", "Fictional documented permission")
+        button("Save customer").assertIsNotEnabled()
+        fill("Permission date", today.minusDays(220).toString())
+        tap("Save customer")
+        val saved = LocalStore(context).loadWorkspace()
+        val added = saved.customers.single()
+        assertEquals(today.minusDays(220).toString(), added.lastService)
+        assertEquals(today.minusDays(220).toString(), added.consentDate)
+        assertEquals(85.50, added.lastPrice, 0.001)
+        assertTrue(EligibilityIndex(saved).reasons(added, added.zip, added.service).isEmpty())
+        screenshot("00_customer_added")
+    }
+
     @Test fun neighborhoodOfferCanBeReviewedApprovedAndBookedWithoutSendingAnything() {
         launch(base())
         screenshot("01_overview")
