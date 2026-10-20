@@ -15,3 +15,6 @@ build/
 *.p12
 *.pfx
 **/routerevive-release.*
+
+# Local Android smoke-test evidence
+emulator-evidence/

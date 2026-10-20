@@ -84,12 +84,12 @@ object CampaignRules {
 
     fun reasons(
         customer: Customer, zip: String, service: String, today: LocalDate,
-        customers: List<Customer>, campaigns: List<Campaign>
+        customers: List<Customer>, campaigns: List<Campaign>, index: EligibilityIndex? = null
     ): List<String> {
         val errors = mutableListOf<String>()
         if (customer.demo) errors += "Example record (not contactable)"
         if (customer.zip != zip || !customer.zip.matches(Regex("\\d{5}"))) errors += "Outside selected ZIP"
-        if (!customer.service.equals(service, ignoreCase = true)) errors += "Different service"
+        if (!customer.service.trim().equals(service.trim(), ignoreCase = true)) errors += "Different service"
         if (digits(customer.phone).length !in 10..15) errors += "Invalid phone"
         if (!customer.consent || customer.consentEvidence.isBlank()) errors += "No documented SMS marketing permission"
         if (customer.optedOut) errors += "Opted out"
@@ -102,11 +102,11 @@ object CampaignRules {
             if (recent == null || ChronoUnit.DAYS.between(recent, today) < CONTACT_COOLDOWN_DAYS)
                 errors += "Contacted in past 60 days"
         }
-        val sameNumber = customers.count {
+        val duplicatePhone = index?.duplicatePhones?.contains(digits(customer.phone)) ?: customers.any {
             it.id != customer.id && digits(it.phone) == digits(customer.phone) && digits(it.phone).isNotBlank()
         }
-        if (sameNumber > 0) errors += "Duplicate phone number"
-        if (campaigns.any { campaign ->
+        if (duplicatePhone) errors += "Duplicate phone number"
+        if (index?.activeCustomerIds?.contains(customer.id) ?: campaigns.any { campaign ->
             runCatching { !LocalDate.parse(campaign.expiryDate).isBefore(today) }.getOrDefault(false) &&
                 campaign.recipients.any { it.customerId == customer.id && it.status in busy }
         }) errors += "Already in active campaign"

@@ -28,16 +28,22 @@ import java.util.Locale
 
 @Composable
 fun DashboardScreen(
-    customers: List<Customer>, appointments: List<Appointment>, jobs: List<JobRecord>,
-    requests: List<BookingRequest>, business: BusinessProfile,
+    state: WorkspaceSnapshot,
     onCustomers: () -> Unit, onJobs: () -> Unit,
     onSchedule: () -> Unit, onRequests: () -> Unit,
     onCampaigns: () -> Unit, onBusiness: () -> Unit, onMap: () -> Unit,
+    onOpportunity: (String, String) -> Unit,
     onCloud: () -> Unit, onInsights: () -> Unit,
     onExport: () -> Unit, onImport: () -> Unit, onLegacyImport: () -> Unit,
     backupBusy: Boolean, backupMessage: String
 ) {
+    val customers = state.customers
+    val appointments = state.appointments
+    val jobs = state.jobs
+    val requests = state.requests
+    val business = state.business
     val now = LocalDate.now()
+    val opportunities = remember(state, now) { ReactivationRules.groups(state, now) }
     val openRequests = requests.count { it.status in setOf("NEW", "CONTACTED") }
     val upcoming = appointments.filter {
         it.status in setOf("SCHEDULED", "IN_PROGRESS") &&
@@ -76,6 +82,34 @@ fun DashboardScreen(
                     Spacer(Modifier.width(8.dp))
                     Icon(Icons.AutoMirrored.Filled.ArrowForward, null, Modifier.size(18.dp))
                 }
+            }
+        }
+
+        RouteCard {
+            SectionHeading("Ready to reconnect", "Offers", onCampaigns)
+            if (opportunities.isEmpty()) {
+                Text(if (customers.isEmpty()) "Add past customers to find your next repeat booking."
+                    else "No customers are eligible for a repeat-service offer right now.",
+                    style = MaterialTheme.typography.bodyMedium)
+                Text("Customers need documented permission, a due service and no open booking or other exclusions.",
+                    style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                TextButton(onClick = onCustomers) { Text("Review customers") }
+            } else {
+                Text("${opportunities.sumOf { it.customers.size }} eligible customers",
+                    style = MaterialTheme.typography.titleMedium, color = colors.primary)
+                opportunities.take(3).forEach { group ->
+                    Row(verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Text("ZIP ${group.zip} · ${group.customers.size} ready",
+                                style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Text(group.service, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                        }
+                        TextButton(onClick = { onOpportunity(group.zip, group.service) }) { Text("Build offer") }
+                    }
+                }
+                Text("Every message stays a draft until you review it. You send it yourself.",
+                    style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
             }
         }
 

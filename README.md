@@ -1,42 +1,46 @@
 # RouteRevive
 
-A native Android workspace for small service businesses. Manage customers, appointments, jobs, invoices and repeat-service campaigns, with encrypted local records and optional private cloud backups.
+A native Android workspace for small service businesses. Reconnect with previous customers by neighborhood, review every message, and keep bookings, service history, jobs and received payments together.
+
+## The original workflow
+
+1. Add past customers with their service history and contact preferences, or preview a customer CSV import.
+2. Open **Overview → Ready to reconnect** to find eligible customers grouped by ZIP and service.
+3. Build a neighborhood offer. Review the audience, exclusions, price, available slots and example message.
+4. Approve each customer draft. Open your SMS app, review/send it yourself, then explicitly record that it was sent.
+5. Record the reply and confirm a conflict-free appointment when the customer agrees.
+6. Complete the actual service from Campaigns, Schedule or Jobs. The linked appointment, job and last-service date stay aligned.
+7. Record actual payments. Campaigns and the main financial report use the same job receipt records, including partial payments.
+
+Eligibility keeps the existing 180-day service interval and 60-day promotional-contact cooldown, documented permission, opt-outs, duplicate-phone checks, issue flags, active campaigns and upcoming bookings.
 
 ## Development status
 
-**0.2.5 development refresh** builds on the existing 0.2.4 feature set. This pass introduces a shared green design system, a clearer Overview, grouped business tools, responsive customer cards and consistent tab/back navigation. It also removes an unused dashboard and separates the app shell, navigation and theme from the main activity.
+**0.2.6 workflow upgrade** includes the shared green design system, audience previews, repeat-service suggestions, grouped tools, responsive forms and consistent navigation. Whole record sets are persisted before the UI adopts them; failed saves retain the prior screen data. Campaign actions now keep their linked booking, job, service history and receipts consistent. The encrypted version-7 record/backup format is unchanged.
+
+Customer messages are reviewed and sent in the owner's SMS/email app. The shareable HTML inquiry form opens a draft; it does not submit requests to RouteRevive. Cloud snapshots support explicit restore/import, not simultaneous team editing or live merging. Payments are recorded locally; the app does not process charges.
 
 ## Run locally
 
-Use **JDK 17**, Android SDK **36**, and Android SDK Build Tools **36.0.0**. Open this folder in Android Studio, or set `ANDROID_HOME` to your SDK and run:
+Use **JDK 17**, Android SDK **36**, and Android SDK Build Tools **36.0.0**. Open this folder in Android Studio, or set `ANDROID_HOME` to your SDK:
 
 ```sh
-./gradlew testDebugUnitTest lintRelease assembleDebug
+./gradlew testDebugUnitTest lintRelease assembleDebug assembleDebugAndroidTest
 ```
 
-Windows: use `gradlew.bat`. The checked-in wrapper pins Gradle **8.11.1**; a separate Gradle installation is not required. First builds need internet access for dependencies. Install `app/build/outputs/apk/debug/app-debug.apk` on a test device. A debug build cannot update a release-signed installation.
+Windows: use `gradlew.bat`. The checksum-pinned wrapper uses Gradle **8.11.1**; first builds need internet access. The preview APK is `app/build/outputs/apk/debug/app-debug.apk`. A debug APK cannot update a release-signed installation.
 
-## What works
+With an Android device/emulator connected, run `./gradlew connectedDebugAndroidTest`. The smoke suite uses fictional records in a dedicated test installation and exercises offer creation/approval/booking, service completion/payment reporting, keyboard navigation, large text and rotation. It does not launch the SMS app. GitHub Actions runs it on Android 16 and uploads reports/screenshots.
 
-- Customer records, service history, notes, consent and opt-out controls, CSV import.
-- Appointment scheduling, conflict checks, day/week views, repeat bookings and manual reminder drafts.
-- Job progress, photos, invoice line items, received payments and local business analytics.
-- Owner-managed booking request inbox and a shareable HTML inquiry form.
-- Neighborhood maps, route suggestions and repeat-service campaigns with individual message approval.
-- Password-encrypted full backup/restore, optional Supabase accounts and private encrypted cloud snapshots.
-- Optional device credential gate and private local reminders.
+## Checks and releases
 
-Customer messages are reviewed and sent in the owner's SMS/email app. The HTML inquiry form opens a draft; it does not submit requests to RouteRevive. Cloud snapshots support explicit restore/import, not simultaneous team editing or live record merging. Payments are recorded locally; this app does not process them.
+Pull requests run unit tests, release lint, debug builds and the Android screen tests without signing credentials. Successful main-branch builds additionally use the existing persistent signing secrets to build a release APK/AAB and keep the stable direct APK download URL.
 
-## Checks and release builds
-
-Pull requests run unit tests, release lint and a debug APK build without signing credentials. Preview APKs and check reports are attached to the workflow run. Main-branch builds additionally use the existing persistent signing secrets to produce the release APK and AAB. Successful main-branch releases keep the existing direct APK download URL.
-
-Keep the existing application ID and signing certificate when updating an installed release. Export an encrypted backup before installing updates; uninstalling removes the local encryption key. Never commit signing files, credentials, real customer data or backup archives.
+Keep the existing application ID and signing certificate for in-place updates. Export an encrypted backup before upgrading; uninstalling removes the local encryption key. Never commit signing files, credentials, real customer data or backup archives.
 
 ## Developer guide
 
-- [Code map, verification and next development work](docs/DEVELOPMENT.md)
+- [Code map, verification, compatibility and next work](docs/DEVELOPMENT.md)
 - [Earlier release notes and upgrade details](docs/RELEASE_HISTORY.md)
 - [Private cloud setup](docs/SUPABASE_SETUP.md)
 - [Beta release checklist](docs/BETA_RELEASE_CHECKLIST.md)

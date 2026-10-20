@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
@@ -72,6 +73,7 @@ fun RouteAppShell(
                 tonalElevation = 0.dp) {
                 AppSection.entries.forEach { section ->
                     NavigationBarItem(
+                        modifier = Modifier.testTag("nav_${section.page}"),
                         selected = AppNavigation.section(page) == section,
                         onClick = { leaveField { onNavigate(section.page) } },
                         colors = NavigationBarItemDefaults.colors(

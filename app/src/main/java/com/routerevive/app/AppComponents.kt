@@ -5,6 +5,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -81,4 +85,68 @@ fun AdaptivePair(
             }
         }
     }
+}
+
+@Composable
+fun StatusPill(label: String, attention: Boolean = false) {
+    val colors = MaterialTheme.colorScheme
+    Surface(shape = RoundedCornerShape(8.dp),
+        color = if (attention) colors.tertiaryContainer else colors.primaryContainer) {
+        Text(label, modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = if (attention) colors.onTertiaryContainer else colors.onPrimaryContainer)
+    }
+}
+
+@Composable
+fun DateInput(
+    label: String, value: String, onChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    minDate: java.time.LocalDate? = null, maxDate: java.time.LocalDate? = null
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    var dialog by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<android.app.DatePickerDialog?>(null)
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { dialog?.dismiss() } }
+    OutlinedTextField(value, onChange, label = { Text(label) }, singleLine = true,
+        modifier = modifier.fillMaxWidth(),
+        supportingText = { Text("YYYY-MM-DD") },
+        trailingIcon = {
+            IconButton(onClick = {
+                focus.clearFocus()
+                val initial = runCatching { java.time.LocalDate.parse(value) }.getOrDefault(java.time.LocalDate.now())
+                dialog = android.app.DatePickerDialog(context, { _, year, month, day ->
+                    onChange(java.time.LocalDate.of(year, month + 1, day).toString())
+                }, initial.year, initial.monthValue - 1, initial.dayOfMonth).apply {
+                    val zone = java.time.ZoneId.systemDefault()
+                    minDate?.let { datePicker.minDate = it.atStartOfDay(zone).toInstant().toEpochMilli() }
+                    maxDate?.let { datePicker.maxDate = it.atStartOfDay(zone).toInstant().toEpochMilli() }
+                    show()
+                }
+            }) { Icon(androidx.compose.material.icons.Icons.Default.CalendarMonth, "Choose $label") }
+        })
+}
+
+@Composable
+fun TimeInput(label: String, value: String, onChange: (String) -> Unit,
+              modifier: Modifier = Modifier) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    var dialog by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf<android.app.TimePickerDialog?>(null)
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { dialog?.dismiss() } }
+    OutlinedTextField(value, onChange, label = { Text(label) }, singleLine = true,
+        modifier = modifier.fillMaxWidth(), supportingText = { Text("24-hour time · HH:mm") },
+        trailingIcon = {
+            IconButton(onClick = {
+                focus.clearFocus()
+                val initial = runCatching { java.time.LocalTime.parse(value) }.getOrDefault(java.time.LocalTime.of(9, 0))
+                dialog = android.app.TimePickerDialog(context, { _, hour, minute ->
+                    onChange(java.time.LocalTime.of(hour, minute).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")))
+                }, initial.hour, initial.minute, true).apply { show() }
+            }) { Icon(androidx.compose.material.icons.Icons.Default.Schedule, "Choose $label") }
+        })
 }

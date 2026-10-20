@@ -2,6 +2,10 @@ package com.routerevive.app
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.WorkOutline
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
@@ -29,21 +33,24 @@ import java.util.Locale
 
 private fun money(value: Double): String = "$" + String.format(Locale.US, "%,.2f", value)
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun JobsScreen(
     appointments: List<Appointment>,
     customers: List<Customer>,
     jobs: List<JobRecord>,
     business: BusinessProfile,
-    onSaveJob: (JobRecord) -> Unit,
+    initialAppointmentId: String,
+    onSaveJob: (JobRecord) -> Boolean,
     onOpenSchedule: () -> Unit
 ) {
-    var selectedId by remember { mutableStateOf<String?>(null) }
-    var statusFilter by remember { mutableStateOf("All") }
+    var selectedId by rememberSaveable(initialAppointmentId) { mutableStateOf(initialAppointmentId.ifBlank { null }) }
+    var statusFilter by rememberSaveable { mutableStateOf("All") }
     val appointment = appointments.firstOrNull { it.id == selectedId }
     if (appointment != null) {
         val customer = customers.firstOrNull { it.id == appointment.customerId }
         if (customer != null) {
+            BackHandler { selectedId = null }
             JobDetailScreen(appointment, customer,
                 jobs.firstOrNull { it.appointmentId == appointment.id },
                 business, onSaveJob, onClose = { selectedId = null })
@@ -68,8 +75,9 @@ fun JobsScreen(
             Text("Manage / add appointments")
         }
         if (appointments.isEmpty()) {
-            Text("Your scheduled appointments will appear here as job records. Add one from Schedule.",
-                modifier = Modifier.padding(14.dp))
+            RouteCard { RouteEmptyState(Icons.Default.WorkOutline, "Your next job starts in Schedule",
+                "Add an appointment to keep service details, photos, invoices and payments together.",
+                action = "Open schedule", onAction = onOpenSchedule) }
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             val visible = appointments.filter { a ->
@@ -94,7 +102,7 @@ fun JobsScreen(
                         Text(a.service, fontSize = 13.sp)
                         Text("Job progress: " + JobProgress.label(job.status),
                             color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
-                        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                             Text("Total " + money(JobMath.subtotal(job)), color = MaterialTheme.colorScheme.primary)
                             Text("Due " + money(JobMath.balance(job)), fontSize = 13.sp)
                         }
@@ -111,18 +119,19 @@ fun JobsScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun JobDetailScreen(
     appointment: Appointment,
     customer: Customer,
     savedJob: JobRecord?,
     business: BusinessProfile,
-    onSaveJob: (JobRecord) -> Unit,
+    onSaveJob: (JobRecord) -> Boolean,
     onClose: () -> Unit
 ) {
     val context = LocalContext.current
     val starter = remember(appointment.id) { JobMath.defaultFrom(appointment) }
-    val job = savedJob ?: starter
+    val job = (savedJob ?: starter).let { if (appointment.status == "COMPLETED") it.copy(status = "COMPLETED") else it }
     var company by remember(job.id) { mutableStateOf(job.businessName.ifBlank { business.name }) }
     var notes by remember(job.id) { mutableStateOf(job.serviceDetails) }
     var dueDate by remember(job.id) { mutableStateOf(job.dueDate) }
@@ -143,7 +152,9 @@ private fun JobDetailScreen(
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) runCatching {
             val filename = JobMedia.importPhoto(context, uri)
-            onSaveJob(job.copy(photos = job.photos + JobPhoto(filename, photoStage)))
+            if (!onSaveJob(job.copy(photos = job.photos + JobPhoto(filename, photoStage)))) {
+                JobMedia.remove(context, filename); issue = "Photo was not saved. Your prior record is unchanged."
+            }
         }.onFailure { issue = "Could not import image: " + it.message }
     }
     val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { captured ->
@@ -151,7 +162,9 @@ private fun JobDetailScreen(
         cameraFile = null
         if (name != null) {
             if (captured && JobMedia.normalizeCameraPhoto(context, name)) {
-                onSaveJob(job.copy(photos = job.photos + JobPhoto(name, photoStage)))
+                if (!onSaveJob(job.copy(photos = job.photos + JobPhoto(name, photoStage)))) {
+                    JobMedia.remove(context, name); issue = "Photo was not saved. Please try again."
+                }
             } else {
                 JobMedia.remove(context, name)
                 if (captured) issue = "Unable to save camera photo."
@@ -174,15 +187,18 @@ private fun JobDetailScreen(
         Text("Appointment: " + appointment.status.replace('_', ' '), fontSize = 12.sp)
         HorizontalDivider()
         Text("JOB PROGRESS", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-        Text("Update progress independently of invoice/payment status.",
+        Text("Completing service also updates the appointment and customer history. Payments remain separate.",
             color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp)
         listOf(
             listOf("PLANNED", "IN_PROGRESS"),
             listOf("ON_HOLD", "COMPLETED")
         ).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { stage ->
                     FilterChip(selected = job.status == stage,
+                        enabled = appointment.status != "CANCELLED" &&
+                            (appointment.status != "COMPLETED" || stage == "COMPLETED") &&
+                            (stage != "COMPLETED" || runCatching { !LocalDate.parse(appointment.date).isAfter(LocalDate.now()) }.getOrDefault(false)),
                         onClick = { onSaveJob(JobProgress.update(job, stage)) },
                         label = { Text(JobProgress.label(stage)) })
                 }
@@ -206,9 +222,8 @@ private fun JobDetailScreen(
         if (!validDue) Text("Enter a valid date or leave it blank.",
             color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
         Button(onClick = {
-            onSaveJob(job.copy(businessName = company.trim(), serviceDetails = notes.trim(),
-                dueDate = dueDate.trim()))
-            issue = "Job details saved."
+            issue = if (onSaveJob(job.copy(businessName = company.trim(), serviceDetails = notes.trim(),
+                dueDate = dueDate.trim()))) "Job details saved." else "Job details were not saved. Please try again."
         }, enabled = validDue && validNotes, modifier = Modifier.fillMaxWidth()) {
             Text("Save job details")
         }
@@ -237,7 +252,7 @@ private fun JobDetailScreen(
         Text("BEFORE / AFTER PHOTOS", fontWeight = FontWeight.Bold, fontSize = 13.sp)
         Text("Stored privately on this phone. JSON backups do not include photo files.",
             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = photoStage == "BEFORE",
                 onClick = { photoStage = "BEFORE" }, label = { Text("Before") })
             FilterChip(selected = photoStage == "AFTER",
@@ -251,7 +266,7 @@ private fun JobDetailScreen(
                 color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
             TextButton(onClick = { confirmRemovePhoto = photo }) { Text("Remove photo") }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(enabled = job.photos.size < 16, onClick = { pickImage.launch("image/*") }) {
                 Text("Choose photo")
             }
@@ -285,7 +300,7 @@ private fun JobDetailScreen(
             onClick = { showPayment = true }) { Text("+ Record deposit / payment") }
         Text("Payments are recorded manually. No bank or card is charged.",
             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = {
                 runCatching { JobPdf.share(context, job.copy(businessName = company.trim(),
                     serviceDetails = notes.trim(), dueDate = dueDate.trim()), customer, appointment, false, business) }
@@ -298,9 +313,8 @@ private fun JobDetailScreen(
                     businessName = company.trim(),
                     serviceDetails = notes.trim(), dueDate = dueDate.trim(),
                     invoiceIssued = true)
-                runCatching { JobPdf.share(context, ready, customer, appointment, true, business) }
-                    .onSuccess { onSaveJob(ready) }
-                    .onFailure { issue = "Invoice PDF failed: " + it.message }
+                if (onSaveJob(ready)) runCatching { JobPdf.share(context, ready, customer, appointment, true, business) }
+                    .onFailure { issue = "Invoice saved, but PDF sharing failed: " + it.message }
             } else issue = "Save valid details and add a service first."
         }, enabled = validDue && validNotes && job.lineItems.isNotEmpty()) {
             Text("Create / share invoice PDF")
@@ -325,8 +339,9 @@ private fun JobDetailScreen(
         },
         confirmButton = { TextButton(enabled = JobMath.validLineItem(itemCandidate),
             onClick = {
-                onSaveJob(job.copy(lineItems = job.lineItems + itemCandidate))
-                lineName = ""; lineQuantity = "1"; linePrice = "0"; showLine = false
+                if (onSaveJob(job.copy(lineItems = job.lineItems + itemCandidate))) {
+                    lineName = ""; lineQuantity = "1"; linePrice = "0"; showLine = false
+                }
             }) { Text("Add") } },
         dismissButton = { TextButton(onClick = { showLine = false }) { Text("Cancel") } })
 
@@ -350,13 +365,14 @@ private fun JobDetailScreen(
         },
         confirmButton = { TextButton(enabled =
             JobMath.canRecordPayment(job, paymentValue) &&
-            runCatching { LocalDate.parse(paymentDate) }.isSuccess &&
+            runCatching { !LocalDate.parse(paymentDate).isAfter(LocalDate.now()) }.getOrDefault(false) &&
             paymentMethod.isNotBlank() && paymentNote.length < 300,
             onClick = {
-                onSaveJob(job.copy(payments = job.payments +
+                if (onSaveJob(job.copy(payments = job.payments +
                     JobPayment(amount = paymentValue, date = paymentDate,
-                        method = paymentMethod.trim(), notes = paymentNote.trim())))
-                showPayment = false; paymentAmount = ""; paymentNote = ""
+                        method = paymentMethod.trim(), notes = paymentNote.trim())))) {
+                    showPayment = false; paymentAmount = ""; paymentNote = ""
+                }
             }) { Text("Record received") } },
         dismissButton = { TextButton(onClick = { showPayment = false }) { Text("Cancel") } })
 
@@ -365,9 +381,10 @@ private fun JobDetailScreen(
             title = { Text("Remove photo?") },
             text = { Text("This deletes the local photo from this device.") },
             confirmButton = { TextButton(onClick = {
-                onSaveJob(job.copy(photos = job.photos.filterNot { it.filename == photo.filename }))
-                JobMedia.remove(context, photo.filename)
-                confirmRemovePhoto = null
+                if (onSaveJob(job.copy(photos = job.photos.filterNot { it.filename == photo.filename }))) {
+                    JobMedia.remove(context, photo.filename)
+                    confirmRemovePhoto = null
+                }
             }) { Text("Delete") } },
             dismissButton = { TextButton(onClick = { confirmRemovePhoto = null }) { Text("Cancel") } })
     }

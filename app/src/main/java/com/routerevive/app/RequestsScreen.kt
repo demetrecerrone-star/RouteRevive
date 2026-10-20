@@ -1,6 +1,10 @@
 package com.routerevive.app
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -15,27 +19,29 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.LocalDate
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RequestsScreen(
     requests: List<BookingRequest>,
     appointments: List<Appointment>,
-    onAdd: (BookingRequest) -> Unit,
-    onStatus: (BookingRequest, String) -> Unit,
-    onBook: (BookingRequest) -> Unit
+    errorMessage: String,
+    onAdd: (BookingRequest) -> Boolean,
+    onStatus: (BookingRequest, String) -> Boolean,
+    onBook: (BookingRequest) -> Boolean
 ) {
     var showNew by remember { mutableStateOf(false) }
     var booking by remember { mutableStateOf<BookingRequest?>(null) }
-    var name by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var zip by remember { mutableStateOf("") }
-    var service by remember { mutableStateOf("") }
-    var date by remember { mutableStateOf(LocalDate.now().plusDays(1).toString()) }
-    var time by remember { mutableStateOf("09:00") }
-    var duration by remember { mutableStateOf("60") }
-    var quote by remember { mutableStateOf("0") }
-    var notes by remember { mutableStateOf("") }
-    var source by remember { mutableStateOf("Phone") }
-    var requestFilter by remember { mutableStateOf("Open") }
+    var name by rememberSaveable { mutableStateOf("") }
+    var phone by rememberSaveable { mutableStateOf("") }
+    var zip by rememberSaveable { mutableStateOf("") }
+    var service by rememberSaveable { mutableStateOf("") }
+    var date by rememberSaveable { mutableStateOf(LocalDate.now().plusDays(1).toString()) }
+    var time by rememberSaveable { mutableStateOf("09:00") }
+    var duration by rememberSaveable { mutableStateOf("60") }
+    var quote by rememberSaveable { mutableStateOf("0") }
+    var notes by rememberSaveable { mutableStateOf("") }
+    var source by rememberSaveable { mutableStateOf("Phone") }
+    var requestFilter by rememberSaveable { mutableStateOf("Open") }
     val candidate = BookingRequest(name = name.trim(), phone = phone.trim(), zip = zip.trim(),
         service = service.trim(), requestedDate = date, requestedTime = time,
         durationMinutes = duration.toIntOrNull() ?: 0, quotedPrice = quote.toDoubleOrNull() ?: -1.0,
@@ -47,11 +53,9 @@ fun RequestsScreen(
         .thenBy { it.requestedDate }.thenBy { it.requestedTime })
 
     Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-        Text("BOOKING REQUESTS", color = MaterialTheme.colorScheme.primary,
-            fontWeight = FontWeight.Bold, fontSize = 12.sp)
-        Text("$open open request(s) · entered by your business, not submitted online",
+        Text("$open open ${if (open == 1) "inquiry" else "inquiries"} · recorded from your calls, texts and emails",
             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Button(onClick = {
                 name = ""; phone = ""; zip = ""; service = ""; notes = "";
                 date = LocalDate.now().plusDays(1).toString(); time = "09:00";
@@ -62,18 +66,19 @@ fun RequestsScreen(
             FilterChip(selected = requestFilter == "All",
                 onClick = { requestFilter = "All" }, label = { Text("All") })
         }
-        if (displayed.isEmpty()) Text(
-            if (requests.isEmpty()) "No requests yet. Add requests received by phone, email, text, or in person."
-            else "No open requests. Switch to All to see earlier requests.",
-            color = MaterialTheme.colorScheme.secondary,
-            modifier = Modifier.padding(vertical = 20.dp))
+        if (displayed.isEmpty()) RouteCard {
+            RouteEmptyState(Icons.Default.Inbox, if (requests.isEmpty()) "Your inquiries will land here" else "All caught up",
+                "Record an inquiry, agree on the details, then confirm it into your schedule.")
+        }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(9.dp),
             contentPadding = PaddingValues(bottom = 20.dp)) {
             items(displayed, key = { it.id }) { request ->
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                    Column(Modifier.fillMaxWidth().padding(12.dp),
+                    Column(Modifier.fillMaxWidth().padding(18.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(request.name, fontWeight = FontWeight.Bold)
+                        StatusPill(request.status.replace('_', ' ').lowercase().replaceFirstChar { it.uppercase() },
+                            request.status in setOf("NEW", "CONTACTED"))
+                        Text(request.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                         Text(request.phone + " · " + request.zip + " · " + request.source,
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
                         Text(request.service, fontSize = 13.sp)
@@ -84,7 +89,7 @@ fun RequestsScreen(
                         if (request.status == "NEW" || request.status == "CONTACTED") {
                             if (request.status == "NEW") TextButton(
                                 onClick = { onStatus(request, "CONTACTED") }) { Text("Mark contacted") }
-                            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                                 Button(onClick = { booking = request }) { Text("Confirm booking") }
                                 TextButton(onClick = { onStatus(request, "DECLINED") }) {
                                     Text("Decline")
@@ -111,21 +116,21 @@ fun RequestsScreen(
                 RequestField("Phone", phone, KeyboardType.Phone) { phone = it }
                 RequestField("ZIP", zip, KeyboardType.Number) { zip = it }
                 RequestField("Service requested", service) { service = it }
-                RequestField("Date YYYY-MM-DD", date) { date = it }
-                RequestField("Time HH:mm", time) { time = it }
+                DateInput("Requested date", date, { date = it })
+                TimeInput("Requested time", time, { time = it })
                 RequestField("Duration minutes", duration, KeyboardType.Number) { duration = it }
                 RequestField("Quoted price ($)", quote, KeyboardType.Decimal) { quote = it }
                 RequestField("Received via (Phone, Text, Email, In person)", source) { source = it }
                 OutlinedTextField(notes, { if (it.length <= 3000) notes = it },
                     label = { Text("Notes") }, minLines = 2, modifier = Modifier.fillMaxWidth())
-                if (!BookingRules.valid(candidate))
+                if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
+                if (!BookingRules.valid(candidate) || !WorkspaceRules.validMoney(candidate.quotedPrice))
                     Text("Complete the required name, valid phone/ZIP, service, date/time, duration and price.",
                         color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
             }
         },
-        confirmButton = { TextButton(enabled = BookingRules.valid(candidate), onClick = {
-            onAdd(candidate)
-            showNew = false
+        confirmButton = { TextButton(enabled = BookingRules.valid(candidate) && WorkspaceRules.validMoney(candidate.quotedPrice), onClick = {
+            if (onAdd(candidate)) showNew = false
         }) { Text("Save request") } },
         dismissButton = { TextButton(onClick = { showNew = false }) { Text("Cancel") } })
 
@@ -137,28 +142,28 @@ fun RequestsScreen(
         val updated = request.copy(requestedDate = whenDate, requestedTime = whenTime,
             durationMinutes = whenDuration.toIntOrNull() ?: 0,
             quotedPrice = whenPrice.toDoubleOrNull() ?: -1.0)
-        val valid = BookingRules.bookable(updated, appointments)
+        val valid = BookingRules.bookable(updated, appointments) && WorkspaceRules.validMoney(updated.quotedPrice)
         AlertDialog(onDismissRequest = { booking = null }, title = { Text("Confirm appointment") },
             text = {
                 Column(Modifier.heightIn(max = 365.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Confirm with the customer before converting this request. A new customer record will have marketing consent disabled.",
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
-                    RequestField("Confirmed date YYYY-MM-DD", whenDate) { whenDate = it }
-                    RequestField("Confirmed time HH:mm", whenTime) { whenTime = it }
+                    DateInput("Confirmed date", whenDate, { whenDate = it }, minDate = LocalDate.now())
+                    TimeInput("Confirmed time", whenTime, { whenTime = it })
                     RequestField("Duration (minutes)", whenDuration, KeyboardType.Number) {
                         whenDuration = it
                     }
                     RequestField("Confirmed quoted price", whenPrice, KeyboardType.Decimal) {
                         whenPrice = it
                     }
+                    if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
                     if (!valid) Text("Choose a future start time, valid duration, and an available slot with no conflicting appointments. Jobs cannot cross midnight.",
                         fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                 }
             },
             confirmButton = { TextButton(enabled = valid, onClick = {
-                onBook(updated)
-                booking = null
+                if (onBook(updated)) booking = null
             }) { Text("Confirm and schedule") } },
             dismissButton = { TextButton(onClick = { booking = null }) { Text("Cancel") } })
     }
