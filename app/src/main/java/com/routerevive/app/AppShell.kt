@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
@@ -31,6 +32,7 @@ fun RouteAppShell(
 ) {
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val largeText = LocalDensity.current.fontScale >= 1.3f
     fun leaveField(action: () -> Unit) {
         focus.clearFocus()
         keyboard?.hide()
@@ -73,7 +75,9 @@ fun RouteAppShell(
                 tonalElevation = 0.dp) {
                 AppSection.entries.forEach { section ->
                     NavigationBarItem(
-                        modifier = Modifier.testTag("nav_${section.page}"),
+                        modifier = Modifier.testTag("nav_${section.page}").semantics {
+                            contentDescription = section.label
+                        },
                         selected = AppNavigation.section(page) == section,
                         onClick = { leaveField { onNavigate(section.page) } },
                         colors = NavigationBarItemDefaults.colors(
@@ -100,7 +104,12 @@ fun RouteAppShell(
                                 }, contentDescription = null)
                             }
                         },
-                        label = { Text(section.label, fontSize = 11.sp, maxLines = 1,
+                        label = { Text(if (largeText) when (section) {
+                            AppSection.OVERVIEW -> "Home"
+                            AppSection.CUSTOMERS -> "Clients"
+                            AppSection.SCHEDULE -> "Plan"
+                            else -> section.label
+                        } else section.label, fontSize = 11.sp, maxLines = 1,
                             overflow = TextOverflow.Ellipsis) }
                     )
                 }

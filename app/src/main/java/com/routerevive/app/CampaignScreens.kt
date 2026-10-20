@@ -71,7 +71,7 @@ fun CampaignScreen(state: WorkspaceSnapshot, onNew: () -> Unit, onSelect: (Strin
                     Text("$booked / ${campaign.capacity} booked · ${dollars(CampaignFinance.received(state, campaign))} collected",
                         style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     val drafts = campaign.recipients.count { it.status == "DRAFT" }
-                    Text("${campaign.recipients.size} customers · $drafts awaiting approval",
+                    Text("${campaign.recipients.size} ${if (campaign.recipients.size == 1) "customer" else "customers"} · $drafts awaiting approval",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -84,7 +84,7 @@ fun NewCampaignScreen(state: WorkspaceSnapshot, initialZip: String, initialServi
                       onSave: (Campaign) -> Unit) {
     val today = LocalDate.now()
     val id = rememberSaveable { UUID.randomUUID().toString() }
-    var title by rememberSaveable { mutableStateOf("Neighborhood repeat-service offer") }
+    var title by rememberSaveable { mutableStateOf("Neighborhood offer") }
     var business by rememberSaveable { mutableStateOf(state.business.name) }
     var zip by rememberSaveable { mutableStateOf(initialZip) }
     var service by rememberSaveable { mutableStateOf(initialService) }

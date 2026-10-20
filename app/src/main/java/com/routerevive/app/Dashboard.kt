@@ -95,7 +95,8 @@ fun DashboardScreen(
                     style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 TextButton(onClick = onCustomers) { Text("Review customers") }
             } else {
-                Text("${opportunities.sumOf { it.customers.size }} eligible customers",
+                val eligibleCount = opportunities.sumOf { it.customers.size }
+                Text("$eligibleCount eligible ${if (eligibleCount == 1) "customer" else "customers"}",
                     style = MaterialTheme.typography.titleMedium, color = colors.primary)
                 opportunities.take(3).forEach { group ->
                     Row(verticalAlignment = Alignment.CenterVertically,
