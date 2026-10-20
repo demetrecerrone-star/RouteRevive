@@ -75,9 +75,9 @@ fun AdaptivePair(
                 second(Modifier.fillMaxWidth())
             }
         } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                first(Modifier.weight(1f))
-                second(Modifier.weight(1f))
+            Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                first(Modifier.weight(1f).fillMaxHeight())
+                second(Modifier.weight(1f).fillMaxHeight())
             }
         }
     }

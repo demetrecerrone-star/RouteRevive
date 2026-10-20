@@ -18,6 +18,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
@@ -31,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.LocalDate
@@ -402,7 +405,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                     }, onCancel = { page = "customers" })
                 }
                 "map" -> NeighborhoodMapScreen(
-                    customers = customers.toList(),
+                    customers = customers.toList(), campaigns = campaigns.toList(),
                     appointments = appointments.toList(),
                     onSavePin = { id, latitude, longitude ->
                         customers.firstOrNull { it.id == id }?.let {
