@@ -119,7 +119,7 @@ fun DashboardScreen(
                 if (upcoming.isEmpty()) {
                     RouteEmptyState(Icons.Default.EventAvailable, "Room for your next booking",
                         "Add an appointment in Schedule or review a customer inquiry.",
-                        "Open schedule", onSchedule)
+                        action = "Open schedule", onAction = onSchedule)
                 } else {
                     upcoming.take(3).forEachIndexed { index, appointment ->
                         if (index > 0) HorizontalDivider(color = colors.outlineVariant)

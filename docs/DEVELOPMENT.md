@@ -60,6 +60,7 @@ These are open follow-up tasks, not implemented features.
 - Shared palette, card styles, icon treatments, spacing and narrow/large-font fallback for dashboard pairs.
 - Overview with actionable metrics, upcoming appointments, business tools, payments and expandable local backup controls.
 - Grouped More tools, discoverable requests badge, customer search empty state and wrapping card actions.
+- The shell reserves keyboard space and clears text-field focus when switching screens.
 - Customer detail pages retain Customers selection; nested back navigation follows the owning section. Android Back returns other primary tabs to Overview.
 - Screen and selected-record state survive activity recreation; unsaved form drafts are not preserved by this pass.
 - Removed the duplicate unused home dashboard and its obsolete version text. Current version text comes from `BuildConfig`.

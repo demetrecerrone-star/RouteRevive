@@ -46,8 +46,8 @@ fun FeatureIcon(icon: ImageVector, tint: Color = MaterialTheme.colorScheme.prima
 @Composable
 fun RouteEmptyState(
     icon: ImageVector, title: String, message: String,
-    action: String? = null, onAction: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    action: String? = null, onAction: () -> Unit = {}
 ) {
     Column(modifier.fillMaxWidth().padding(vertical = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

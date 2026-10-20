@@ -37,7 +37,7 @@ fun CustomerScreen(
                 RouteCard {
                     RouteEmptyState(Icons.Default.People, "Your customer list starts here",
                         "Add contact details and a service history to keep your next follow-up simple.",
-                        "Add customer", onAdd)
+                        action = "Add customer", onAction = onAdd)
                 }
             }
         } else {
@@ -63,7 +63,7 @@ fun CustomerScreen(
                 RouteCard {
                     RouteEmptyState(Icons.Default.SearchOff, "No customers found",
                         "Try a different name, phone number, ZIP code or service.",
-                        "Clear search", { query = "" })
+                        action = "Clear search", onAction = { query = "" })
                 }
             }
             items(matches, key = { it.id }) { customer ->

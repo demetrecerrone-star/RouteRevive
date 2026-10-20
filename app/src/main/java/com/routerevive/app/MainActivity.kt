@@ -309,7 +309,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
             else -> null
         }
     ) { inner ->
-        Column(Modifier.fillMaxSize().padding(inner)) {
+        Column(Modifier.fillMaxSize().padding(inner).consumeWindowInsets(inner)) {
             if (appError.isNotBlank()) Text(appError, color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp))
             when (page) {

@@ -11,6 +11,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -26,7 +28,15 @@ fun RouteAppShell(
     onAdd: (() -> Unit)?,
     content: @Composable (PaddingValues) -> Unit
 ) {
+    val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    fun leaveField(action: () -> Unit) {
+        focus.clearFocus()
+        keyboard?.hide()
+        action()
+    }
     Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             Surface(color = MaterialTheme.colorScheme.background) {
@@ -35,7 +45,7 @@ fun RouteAppShell(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     if (!AppNavigation.isTopLevel(page)) {
-                        IconButton(onClick = onBack) {
+                        IconButton(onClick = { leaveField(onBack) }) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Go back")
                         }
                     } else {
@@ -50,7 +60,7 @@ fun RouteAppShell(
                             fontWeight = FontWeight.SemiBold, maxLines = 1,
                             overflow = TextOverflow.Ellipsis)
                     }
-                    if (onAdd != null) FilledTonalIconButton(onClick = onAdd) {
+                    if (onAdd != null) FilledTonalIconButton(onClick = { leaveField(onAdd) }) {
                         Icon(Icons.Default.Add,
                             if (page == "customers") "Add customer" else "Create campaign")
                     }
@@ -63,7 +73,7 @@ fun RouteAppShell(
                 AppSection.entries.forEach { section ->
                     NavigationBarItem(
                         selected = AppNavigation.section(page) == section,
-                        onClick = { onNavigate(section.page) },
+                        onClick = { leaveField { onNavigate(section.page) } },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
                             selectedTextColor = MaterialTheme.colorScheme.primary,
