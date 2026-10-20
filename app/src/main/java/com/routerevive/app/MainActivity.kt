@@ -10,52 +10,42 @@ import kotlinx.coroutines.withContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.time.LocalDate
 import java.util.Locale
 
-private val Ink = Color(0xFF0B121C)
-private val Panel = Color(0xFF172335)
-private val Highlight = Color(0xFF4ADE80)
-
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.statusBarColor = android.graphics.Color.rgb(11, 18, 28)
-        window.navigationBarColor = android.graphics.Color.rgb(11, 18, 28)
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+        )
         val store = LocalStore(this)
         setContent {
-            MaterialTheme(
-                colorScheme = darkColorScheme(
-                    primary = Highlight, onPrimary = Ink, background = Ink,
-                    surface = Panel, onSurface = Color.White,
-                    secondary = Color(0xFF9CB0C9), onBackground = Color.White
-                )
-            ) {
+            RouteReviveTheme {
                 SecurityGate(store) { RouteApp(store, openSms = { phone, message ->
                     try {
                         startActivity(Intent(Intent.ACTION_SENDTO, Uri.fromParts("smsto", phone, null)).apply {
@@ -81,11 +71,11 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
     var launchLock by remember { mutableStateOf(store.isAppLockEnabled()) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    var page by remember { mutableStateOf("home") }
-    var selectedId by remember { mutableStateOf("") }
-    var campaignZipFromMap by remember { mutableStateOf("") }
-    var campaignServiceFromMap by remember { mutableStateOf("House pressure washing") }
-    var editingCustomerId by remember { mutableStateOf("") }
+    var page by rememberSaveable { mutableStateOf("home") }
+    var selectedId by rememberSaveable { mutableStateOf("") }
+    var campaignZipFromMap by rememberSaveable { mutableStateOf("") }
+    var campaignServiceFromMap by rememberSaveable { mutableStateOf("House pressure washing") }
+    var editingCustomerId by rememberSaveable { mutableStateOf("") }
     var bookingTime by remember { mutableStateOf("09:00") }
     var bookingDuration by remember { mutableStateOf("60") }
     var importCandidate by remember { mutableStateOf<String?>(null) }
@@ -299,81 +289,29 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
         ).isEmpty() && !LocalDate.parse(campaign.expiryDate).isBefore(LocalDate.now())
 
     val current = campaigns.firstOrNull { it.id == selectedId }
-    BackHandler(page !in setOf("home", "customers", "schedule", "jobs", "more")) {
-        page = when (page) {
-            "campaign_detail", "new_campaign" -> "campaigns"
-            "new_customer", "edit_customer", "customer_history" -> "customers"
-            else -> "more"
-        }
+    val backTarget = AppNavigation.backTarget(page)
+    BackHandler(enabled = backTarget != null) {
+        backTarget?.let { page = it }
     }
 
-    Scaffold(containerColor = Ink, bottomBar = {
-        NavigationBar(containerColor = Panel) {
-            listOf(Triple("home", "Overview", Icons.Default.Home),
-                Triple("customers", "Customers", Icons.Default.People),
-                Triple("schedule", "Schedule", Icons.Default.DateRange),
-                Triple("jobs", "Jobs", Icons.Default.Build),
-                Triple("more", "More", Icons.Default.MoreHoriz)).forEach { (id, title, icon) ->
-                NavigationBarItem(
-                    selected = page == id || (id == "more" &&
-                        page in setOf("map", "campaigns", "campaign_detail",
-                            "new_campaign", "requests", "business", "booking_page", "beta", "cloud",
-                            "insights", "alerts")),
-                    onClick = { page = id },
-                    icon = { Icon(icon, contentDescription = title) }, label = { Text(title, fontSize = 11.sp) }
-                )
-            }
+    RouteAppShell(
+        page = page,
+        title = AppNavigation.title(page, current?.title),
+        openRequests = bookingRequests.count { it.status in setOf("NEW", "CONTACTED") },
+        onNavigate = { page = it },
+        onBack = { backTarget?.let { page = it } },
+        onAdd = when (page) {
+            "customers" -> ({ page = "new_customer" })
+            "campaigns" -> ({ page = "new_campaign" })
+            else -> null
         }
-    }) { inner ->
+    ) { inner ->
         Column(Modifier.fillMaxSize().padding(inner)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("ROUTEREVIVE", color = Highlight, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 2.sp)
-                    Text(when (page) {
-                        "home" -> "Your business, reconnected"
-                        "customers" -> "Customer records"
-                        "new_customer" -> "Add customer"
-                        "edit_customer" -> "Edit customer"
-                        "customer_history" -> "Customer history"
-                        "schedule" -> "Appointments"
-                        "jobs" -> "Jobs & invoices"
-                        "business" -> "Business essentials"
-                        "requests" -> "Booking requests"
-                        "more" -> "More tools"
-                        "booking_page" -> "Customer booking page"
-                        "beta" -> "Beta readiness & privacy"
-                        "cloud" -> "Private cloud backups"
-                        "insights" -> "Business analytics"
-                        "alerts" -> "Business reminders"
-                        "map" -> "Neighborhood map"
-                        "campaigns" -> "Neighborhood campaigns"
-                        "new_campaign" -> "New campaign"
-                        "campaign_detail" -> current?.title ?: "Campaign"
-                        else -> "RouteRevive"
-                    }, color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                if (page == "customers" || page == "campaigns") {
-                    IconButton(onClick = { page = if (page == "customers") "new_customer" else "new_campaign" }) {
-                        Icon(Icons.Default.AddCircle, "Add", tint = Highlight)
-                    }
-                } else if (page !in listOf("home")) {
-                    IconButton(onClick = { page = when (page) {
-                        "campaign_detail", "new_campaign" -> "campaigns"
-                        "new_customer", "edit_customer", "customer_history" -> "customers"
-                        else -> "more"
-                    } }) {
-                        Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
-                    }
-                }
-            }
-            if (appError.isNotBlank()) Text(appError, color = Color(0xFFFF9D9D),
+            if (appError.isNotBlank()) Text(appError, color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp))
             when (page) {
                 "home" -> DashboardScreen(
-                    customers = customers.toList(), campaigns = campaigns.toList(),
+                    customers = customers.toList(),
                     appointments = appointments.toList(), jobs = jobs.toList(),
                     requests = bookingRequests.toList(), business = business,
                     onCustomers = { page = "customers" },
@@ -382,6 +320,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                     onRequests = { page = "requests" },
                     onCampaigns = { page = "campaigns" },
                     onBusiness = { page = "business" },
+                    onMap = { page = "map" },
                     onCloud = { page = "cloud" },
                     onInsights = { page = "insights" },
                     onExport = { backupAction = "export"; backupPassword = "" },
@@ -389,7 +328,6 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                     onLegacyImport = { importLauncher.launch(arrayOf("application/json", "text/plain")) },
                     backupBusy = backupBusy, backupMessage = lastBackupMessage)
                 "more" -> MoreScreen(
-                    business = business,
                     onMap = { page = "map" },
                     onRequests = { page = "requests" },
                     onCampaigns = { page = "campaigns" },
@@ -425,7 +363,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                     onRequests = { page = "requests" },
                     onBackup = { backupAction = "export"; backupPassword = "" })
                 "booking_page" -> BookingPageScreen(
-                    profile = business, onBack = { page = "more" })
+                    profile = business)
                 "requests" -> RequestsScreen(
                     requests = bookingRequests.toList(),
                     appointments = appointments.toList(),
@@ -464,7 +402,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                     }, onCancel = { page = "customers" })
                 }
                 "map" -> NeighborhoodMapScreen(
-                    customers = customers.toList(), campaigns = campaigns.toList(),
+                    customers = customers.toList(),
                     appointments = appointments.toList(),
                     onSavePin = { id, latitude, longitude ->
                         customers.firstOrNull { it.id == id }?.let {
@@ -753,149 +691,6 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
 }
 
 @Composable
-private fun InfoCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Card(modifier = modifier, colors = CardDefaults.cardColors(containerColor = Panel),
-        shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.padding(16.dp), content = content)
-    }
-}
-
-@Composable
-private fun Stat(label: String, value: String, modifier: Modifier = Modifier) {
-    InfoCard(modifier) {
-        Text(label, color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp)
-        Text(value, fontWeight = FontWeight.Bold, fontSize = 24.sp, color = Highlight)
-    }
-}
-
-@Composable
-private fun HomeScreen(customers: List<Customer>, campaigns: List<Campaign>,
-                       jobs: List<JobRecord>,
-                       onCustomers: () -> Unit, onCampaigns: () -> Unit, onNew: () -> Unit,
-                       onJobs: () -> Unit, onSchedule: () -> Unit,
-                       onExport: () -> Unit, onImport: () -> Unit, onLegacyImport: () -> Unit,
-                       onBusiness: () -> Unit, backupBusy: Boolean, backupMessage: String) {
-    val paid = campaigns.sumOf { campaign -> campaign.recipients.sumOf { it.paidAmount } }
-    val booked = campaigns.sumOf { CampaignRules.bookedSlots(it) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        InfoCard {
-            Text("Turn old customers into new bookings", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            Text("Build repeat-service campaigns by ZIP code, approve every message, and record actual revenue.",
-                color = MaterialTheme.colorScheme.secondary)
-            Spacer(Modifier.height(12.dp))
-            Button(onClick = onNew) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Create campaign") }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Stat("Customers", customers.size.toString(), Modifier.weight(1f))
-            Stat("Booked jobs", booked.toString(), Modifier.weight(1f))
-        }
-        Stat("Campaign revenue recorded", usd(paid), Modifier.fillMaxWidth())
-        Stat("Payments received on job invoices", usd(jobs.sumOf { JobMath.paid(it) }), Modifier.fillMaxWidth())
-        InfoCard {
-            Text("Start here", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Spacer(Modifier.height(8.dp))
-            Text("1. Add actual customer records and their last service dates.")
-            Text("2. Record verifiable permission for promotional messages.")
-            Text("3. Create an offer for a ZIP code and review eligible customers.")
-            Text("4. Approve messages individually, then send using your own SMS app.")
-            Text("5. Track bookings and completed payments.")
-            Spacer(Modifier.height(12.dp))
-            OutlinedButton(onClick = onCustomers) { Text("Manage customers") }
-            OutlinedButton(onClick = onJobs) { Text("Open jobs & invoices") }
-            OutlinedButton(onClick = onBusiness) { Text("Business profile, reporting & imports") }
-            OutlinedButton(onClick = onSchedule) { Text("Manage appointment schedule") }
-            TextButton(onClick = onCampaigns) { Text("View campaigns") }
-        }
-        InfoCard {
-            Text("Back up your data", fontWeight = FontWeight.Bold, fontSize = 17.sp)
-            Spacer(Modifier.height(6.dp))
-            Text("Create a password-encrypted full backup with records, before/after photos, logo, invoices and payments. Remember your password: it cannot be recovered. An existing legacy JSON backup can still be imported separately.",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
-            Row {
-                OutlinedButton(onClick = onExport, enabled = !backupBusy) { Text("Encrypted backup") }
-                Spacer(Modifier.width(10.dp))
-                OutlinedButton(onClick = onImport, enabled = !backupBusy) { Text("Restore full backup") }
-            }
-            TextButton(onClick = onLegacyImport, enabled = !backupBusy) { Text("Import older JSON (photos not included)") }
-            if (backupBusy) CircularProgressIndicator(modifier = Modifier.size(24.dp))
-            if (backupMessage.isNotBlank()) Text(backupMessage, fontSize = 12.sp, color = Highlight)
-        }
-        Text("V0.0.7 · Encrypted local records · No automatic texting or cloud payments",
-            fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
-    }
-}
-
-@Composable
-private fun CustomerScreen(customers: List<Customer>, onAdd: () -> Unit,
-                           onEdit: (String) -> Unit, onHistory: (String) -> Unit,
-                           onOptOut: (String) -> Unit, onIssue: (String) -> Unit,
-                           onBooking: (String) -> Unit) {
-    var query by remember { mutableStateOf("") }
-    val matches = customers.filter {
-        it.name.contains(query, ignoreCase = true) ||
-        it.phone.contains(query) || it.zip.contains(query) ||
-        it.service.contains(query, ignoreCase = true)
-    }.sortedBy { it.name.lowercase() }
-    if (customers.isEmpty()) {
-        Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center) {
-            Icon(Icons.Default.People, null, modifier = Modifier.size(52.dp), tint = Highlight)
-            Text("No customer records yet", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            Text("Add a customer to begin evaluating repeat service opportunities.")
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = onAdd) { Text("Add customer") }
-        }
-    } else LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item {
-            OutlinedTextField(value = query, onValueChange = { query = it },
-                label = { Text("Search names, phone, ZIP or service") },
-                modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Spacer(Modifier.height(10.dp))
-            Button(onClick = onAdd) { Icon(Icons.Default.Add, null); Text(" Add customer") }
-            Text("${matches.size} of ${customers.size} customers",
-                fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
-        }
-        items(matches, key = { it.id }) { c ->
-            InfoCard(Modifier.fillMaxWidth()) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(c.name, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    Text(c.zip, color = Highlight)
-                }
-                Text("${c.service} · Last job ${c.lastService}", color = MaterialTheme.colorScheme.secondary,
-                    fontSize = 12.sp)
-                Text(if (c.consent && c.consentEvidence.isNotBlank()) "SMS permission documented" else "No SMS marketing permission",
-                    color = if (c.consent && c.consentEvidence.isNotBlank()) Highlight else Color(0xFFFBBF24),
-                    fontSize = 12.sp)
-                if (c.address.isNotBlank()) Text(c.address, fontSize = 12.sp)
-                if (c.notes.isNotBlank()) Text(c.notes, fontSize = 12.sp, maxLines = 2)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { onHistory(c.id) }) {
-                        Text("History")
-                    }
-                    OutlinedButton(onClick = { onEdit(c.id) }) {
-                        Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp))
-                        Text(" Edit profile")
-                    }
-                }
-                if (c.optedOut) Text("OPTED OUT — promotional contact blocked", color = Color(0xFFFF9D9D), fontSize = 12.sp)
-                if (c.issueOpen) Text("Unresolved issue — campaign blocked", color = Color(0xFFFBBF24), fontSize = 12.sp)
-                if (c.futureBooked) Text("Upcoming appointment recorded", fontSize = 12.sp)
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = { onIssue(c.id) }) { Text(if (c.issueOpen) "Resolve issue" else "Flag issue", fontSize = 12.sp) }
-                    TextButton(onClick = { onBooking(c.id) }) { Text(if (c.futureBooked) "Clear booked" else "Has booking", fontSize = 12.sp) }
-                }
-                if (!c.optedOut) {
-                    TextButton(onClick = { onOptOut(c.id) }) { Text("Record opt-out", color = Color(0xFFFF9D9D), fontSize = 12.sp) }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun NewCustomerScreen(onSave: (Customer) -> Unit) {
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
@@ -948,22 +743,22 @@ private fun CampaignScreen(campaigns: List<Campaign>, onNew: () -> Unit, onSelec
             Button(onClick = onNew) { Icon(Icons.Default.Add, null); Text(" New neighborhood campaign") }
         }
         if (campaigns.isEmpty()) item {
-            InfoCard {
+            RouteCard {
                 Text("Your campaigns will appear here.", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Text("Create a campaign after adding some customers.", color = MaterialTheme.colorScheme.secondary)
             }
         }
         items(campaigns.reversed(), key = { it.id }) { c ->
-            InfoCard(Modifier.fillMaxWidth()) {
+            RouteCard(Modifier.fillMaxWidth()) {
                 Text(c.title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 Text("${c.service} · ZIP ${c.zip} · ${c.visitDate}",
                     color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp)
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("${c.recipients.size} recipients", color = Highlight)
+                    Text("${c.recipients.size} recipients", color = MaterialTheme.colorScheme.primary)
                     Text("${CampaignRules.bookedSlots(c)}/${c.capacity} slots", color = Color.White)
                 }
-                Text("Collected: ${usd(c.recipients.sumOf { it.paidAmount })}", color = Highlight)
+                Text("Collected: ${usd(c.recipients.sumOf { it.paidAmount })}", color = MaterialTheme.colorScheme.primary)
                 Spacer(Modifier.height(6.dp))
                 OutlinedButton(onClick = { onSelect(c.id) }) { Text("Open campaign") }
             }
@@ -1011,14 +806,14 @@ private fun NewCampaignScreen(customers: List<Customer>, campaigns: List<Campaig
         Field("Starting price in USD", price, KeyboardType.Decimal) { price = it }
         Field("Discount percentage (0–50)", discount, KeyboardType.Number) { discount = it }
         Field("Maximum confirmed bookings", capacity, KeyboardType.Number) { capacity = it }
-        InfoCard {
+        RouteCard {
             Text("Eligibility preview", fontWeight = FontWeight.Bold)
-            Text("${eligible.size} of ${customers.size} records eligible", color = Highlight, fontSize = 21.sp)
+            Text("${eligible.size} of ${customers.size} records eligible", color = MaterialTheme.colorScheme.primary, fontSize = 21.sp)
             Text("Repeat interval: 180 days · Contact cooldown: 60 days",
                 color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp)
             if (customers.isNotEmpty() && eligible.isEmpty())
                 Text("No qualifying customers. Check ZIP, service, service dates, and permission evidence.",
-                    color = Color(0xFFFBBF24), fontSize = 12.sp)
+                    color = MaterialTheme.colorScheme.tertiary, fontSize = 12.sp)
         }
         Button(enabled = good, modifier = Modifier.fillMaxWidth(), onClick = {
             val base = Campaign(title = title.trim(), businessName = business.trim(),
@@ -1043,14 +838,14 @@ private fun CampaignDetailScreen(campaign: Campaign, customers: List<Customer>,
 
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            InfoCard {
+            RouteCard {
                 Text("${campaign.service} · ZIP ${campaign.zip}", fontWeight = FontWeight.Bold)
                 Text("Service ${campaign.visitDate} · Offer expires ${campaign.expiryDate}",
                     color = MaterialTheme.colorScheme.secondary)
                 Spacer(Modifier.height(8.dp))
                 Text("${booked}/${campaign.capacity} bookings · Collected ${usd(paid)}",
-                    color = Highlight, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                if (expired) Text("Expired: promotional sends disabled", color = Color(0xFFFBBF24))
+                    color = MaterialTheme.colorScheme.primary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                if (expired) Text("Expired: promotional sends disabled", color = MaterialTheme.colorScheme.tertiary)
             }
         }
         item {
@@ -1060,12 +855,12 @@ private fun CampaignDetailScreen(campaign: Campaign, customers: List<Customer>,
         items(campaign.recipients, key = { it.customerId }) { r ->
             val customer = customers.firstOrNull { it.id == r.customerId }
             if (customer != null) {
-                InfoCard(Modifier.fillMaxWidth()) {
+                RouteCard(Modifier.fillMaxWidth()) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically) {
                         Text(customer.name, fontWeight = FontWeight.Bold, fontSize = 16.sp,
                             modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(r.status.replace("_", " "), color = if (r.status == "PAID") Highlight else Color(0xFFFBBF24),
+                        Text(r.status.replace("_", " "), color = if (r.status == "PAID") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
                             fontSize = 11.sp)
                     }
                     Spacer(Modifier.height(5.dp))
@@ -1102,15 +897,15 @@ private fun CampaignDetailScreen(campaign: Campaign, customers: List<Customer>,
                         Button(onClick = { onMoney(r, "paid") }) { Text("Record paid amount") }
                     }
                     if (r.status == "PAID") {
-                        Text("Collected: ${usd(r.paidAmount)}", color = Highlight, fontWeight = FontWeight.Bold)
+                        Text("Collected: ${usd(r.paidAmount)}", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                     }
                     if (r.status in listOf("APPROVED", "SENT", "INTERESTED", "DECLINED", "DRAFT") && !customer.optedOut) {
                         TextButton(onClick = { onStatus(r, "OPTED_OUT") }) {
-                            Text("Record customer opt-out", color = Color(0xFFFF9D9D), fontSize = 12.sp)
+                            Text("Record customer opt-out", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                         }
                     }
                     if (customer.optedOut) Text("Promotional contact blocked by opt-out.",
-                        color = Color(0xFFFF9D9D), fontSize = 12.sp)
+                        color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                 }
             }
         }

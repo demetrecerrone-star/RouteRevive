@@ -12,8 +12,8 @@ android {
         applicationId = "com.routerevive.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 15
-        versionName = "0.2.4"
+        versionCode = 16
+        versionName = "0.2.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     val signedStorePath = System.getenv("RR_SIGNING_FILE")
@@ -43,7 +43,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 }
 
 dependencies {
