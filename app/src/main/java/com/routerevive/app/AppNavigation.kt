@@ -46,6 +46,7 @@ object AppNavigation {
         "alerts" -> "Reminders & alerts"
         "map" -> "Neighborhood map"
         "campaigns" -> "Campaigns"
+        "profit_planner" -> "Profit planner"
         "new_campaign" -> "New campaign"
         "campaign_detail" -> campaignTitle?.takeIf { it.isNotBlank() } ?: "Campaign"
         else -> "RouteRevive"

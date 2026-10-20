@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,7 +23,8 @@ fun MoreScreen(
     onMap: () -> Unit, onRequests: () -> Unit,
     onCampaigns: () -> Unit, onBusiness: () -> Unit,
     onBookingPage: () -> Unit, onBeta: () -> Unit,
-    onCloud: () -> Unit, onInsights: () -> Unit, onAlerts: () -> Unit
+    onCloud: () -> Unit, onInsights: () -> Unit, onAlerts: () -> Unit,
+    onProfitPlanner: () -> Unit
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)) {
@@ -30,6 +32,8 @@ fun MoreScreen(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         ToolGroup("Customers & growth") {
+            MoreEntry(Icons.AutoMirrored.Filled.TrendingUp, "Profit planner", "Find nearby work that fits your time and margin", onProfitPlanner)
+            ToolDivider()
             MoreEntry(Icons.Default.Inbox, "Booking requests", "Review inquiries and confirm a time", onRequests)
             ToolDivider()
             MoreEntry(Icons.Default.Campaign, "Campaigns", "Plan repeat-service offers", onCampaigns)

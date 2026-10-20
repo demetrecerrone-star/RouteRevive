@@ -7,6 +7,7 @@ A native Android workspace for small service businesses. Reconnect with previous
 1. Add past customers with their service history and contact preferences, or preview a customer CSV import.
 2. Open **Overview → Ready to reconnect** to find eligible customers grouped by ZIP and service.
 3. Build a neighborhood offer. Review the audience, exclusions, price, available slots and example message.
+   **Profit planner** can build around an existing mapped appointment: choose an opening, enter crew/material/vehicle costs and compare full price with a proposed discount. The resulting draft includes only eligible nearby customers, with a minimum agreed price and a service/travel time block. See [profit planning](docs/PROFIT_PLANNER.md).
 4. Approve each customer draft. Open your SMS app, review/send it yourself, then explicitly record that it was sent.
 5. Record the reply and confirm a conflict-free appointment when the customer agrees.
 6. Complete the actual service from Campaigns, Schedule or Jobs. The linked appointment, job and last-service date stay aligned.
@@ -16,7 +17,7 @@ Eligibility keeps the existing 180-day service interval and 60-day promotional-c
 
 ## Development status
 
-**0.2.6 workflow upgrade** includes the shared green design system, audience previews, repeat-service suggestions, grouped tools, responsive forms and consistent navigation. Whole record sets are persisted before the UI adopts them; failed saves retain the prior screen data. Campaign actions now keep their linked booking, job, service history and receipts consistent. The encrypted version-7 record/backup format is unchanged.
+**0.2.7 profit-planning upgrade** adds explained contribution estimates, margin protection and schedule-bound nearby offers to the 0.2.6 workflow foundation. Whole record sets are persisted before the UI adopts them; failed saves retain the prior screen data. Campaign actions keep their linked booking, job, service history and receipts consistent. Version-7 backups now preserve optional per-offer planning assumptions; older archives remain readable.
 
 Customer messages are reviewed and sent in the owner's SMS/email app. The shareable HTML inquiry form opens a draft; it does not submit requests to RouteRevive. Cloud snapshots support explicit restore/import, not simultaneous team editing or live merging. Payments are recorded locally; the app does not process charges.
 

@@ -208,6 +208,7 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                     },
                     onCloud = { page = "cloud" },
                     onInsights = { page = "insights" },
+                    onProfitPlanner = { page = "profit_planner" },
                     onExport = { backupAction = "export"; backupPassword = "" },
                     onImport = { backupAction = "import"; backupPassword = "" },
                     onLegacyImport = { importLauncher.launch(arrayOf("application/json", "text/plain")) },
@@ -221,7 +222,15 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                     onBeta = { page = "beta" },
                     onCloud = { page = "cloud" },
                     onInsights = { page = "insights" },
-                    onAlerts = { page = "alerts" })
+                    onAlerts = { page = "alerts" },
+                    onProfitPlanner = { page = "profit_planner" })
+                "profit_planner" -> ProfitPlannerScreen(workspace,
+                    onMap = { page = "map" }, onSchedule = { page = "schedule" },
+                    onCreate = { request ->
+                        val saved = change { ProfitPlanner.create(it, request) }
+                        if (saved) { selectedId = request.id; page = "campaign_detail" }
+                        saved
+                    })
                 "insights" -> BusinessInsightsScreen(
                     customers = customers.toList(),
                     appointments = appointments.toList(),
@@ -367,9 +376,11 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         moneyDialog = r.customerId to mode
                         val appointment = CampaignWorkflow.linkedAppointment(workspace, current.id, r.customerId)
                         val job = jobs.firstOrNull { it.appointmentId == appointment?.id }
-                        moneyInput = String.format(Locale.US, "%.2f", if (mode == "book") current.price
+                        moneyInput = String.format(Locale.US, "%.2f", if (mode == "book")
+                            current.profitPlan?.let { ProfitPlanner.estimate(it, current.price, current.discountPct).netPrice } ?: current.price
                             else job?.let(JobMath::balance) ?: r.bookedAmount)
-                        bookingTime = "09:00"; bookingDuration = "60"
+                        bookingTime = ProfitPlanner.nextStart(current, appointments) ?: current.profitPlan?.windowStart ?: "09:00"
+                        bookingDuration = (current.profitPlan?.blockMinutes ?: 60).toString()
                     })
             }
         }
@@ -428,6 +439,13 @@ private fun RouteApp(store: LocalStore, openSms: (String, String) -> Unit) {
                         singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal))
                     if (mode == "book") {
                         Text("Service date: ${campaign?.visitDate.orEmpty()}")
+                        campaign?.profitPlan?.let { plan ->
+                            Text("Planned opening ${plan.windowStart}–${plan.windowEnd}. Reserve ${plan.serviceMinutes} service + ${plan.travelMinutes} travel/setup minutes.",
+                                style = MaterialTheme.typography.bodySmall)
+                            if (ProfitPlanner.nextStart(campaign, appointments) == null) Text(
+                                "No complete slot remains in this opening. Review Schedule before booking.",
+                                color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        }
                         OutlinedTextField(bookingTime, { bookingTime = it }, label = { Text("Start time HH:mm") }, singleLine = true)
                         OutlinedTextField(bookingDuration, { bookingDuration = it }, label = { Text("Duration in minutes") },
                             singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))

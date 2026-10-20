@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -33,7 +34,7 @@ fun DashboardScreen(
     onSchedule: () -> Unit, onRequests: () -> Unit,
     onCampaigns: () -> Unit, onBusiness: () -> Unit, onMap: () -> Unit,
     onOpportunity: (String, String) -> Unit,
-    onCloud: () -> Unit, onInsights: () -> Unit,
+    onCloud: () -> Unit, onInsights: () -> Unit, onProfitPlanner: () -> Unit,
     onExport: () -> Unit, onImport: () -> Unit, onLegacyImport: () -> Unit,
     backupBusy: Boolean, backupMessage: String
 ) {
@@ -87,6 +88,9 @@ fun DashboardScreen(
 
         RouteCard {
             SectionHeading("Ready to reconnect", "Offers", onCampaigns)
+            OutlinedButton(onClick = onProfitPlanner, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.AutoMirrored.Filled.TrendingUp, null); Spacer(Modifier.width(8.dp)); Text("Plan a profitable opening")
+            }
             if (opportunities.isEmpty()) {
                 Text(if (customers.isEmpty()) "Add past customers to find your next repeat booking."
                     else "No customers are eligible for a repeat-service offer right now.",

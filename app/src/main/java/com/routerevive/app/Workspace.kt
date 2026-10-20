@@ -101,6 +101,11 @@ object WorkspaceRules {
             validAppointment(revised, now) && !ScheduleRules.overlaps(revised, state.appointments)) {
             "Booking not moved: choose a valid future time without a conflict."
         }
+        state.campaigns.firstOrNull { it.id == previous.campaignId && it.profitPlan != null }?.let { campaign ->
+            require(revised.date == campaign.visitDate) { "Keep this planned offer on its service date, or cancel it and create a new offer." }
+            val planningErrors = ProfitPlanner.bookingErrors(campaign, revised.price, revised.time, revised.durationMinutes)
+            require(planningErrors.isEmpty()) { planningErrors.joinToString(" ") }
+        }
         return state.copy(appointments = state.appointments.map { if (it.id == revised.id) revised else it })
     }
 

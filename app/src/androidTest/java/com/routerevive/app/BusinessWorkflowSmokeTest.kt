@@ -67,6 +67,59 @@ class BusinessWorkflowSmokeTest {
         shell("settings put system font_scale 1.0")
     }
 
+    @Test fun profitPlannerProtectsMarginAndSavesOnlyNearbyCustomers() {
+        val anchor = customer().copy(id = "smoke-anchor", name = "Alex Example", phone = "6125550111",
+            latitude = 46.35, longitude = -94.25)
+        val nearby = customer().copy(latitude = 46.351, longitude = -94.25)
+        val far = customer().copy(id = "smoke-far", name = "Morgan Example", phone = "6125550112",
+            latitude = 47.0, longitude = -94.25)
+        val appointment = Appointment(id = "smoke-anchor-booking", customerId = anchor.id,
+            service = anchor.service, date = today.plusDays(1).toString(), time = "09:00", price = 150.0)
+        launch(base().copy(customers = listOf(anchor, nearby, far), appointments = listOf(appointment)))
+        tap("Plan a profitable opening")
+        fun fill(label: String, value: String) {
+            compose.onNode(hasText(label) and hasSetTextAction()).performScrollTo().performTextReplacement(value)
+        }
+        fill("Whole crew cost per hour (USD)", "60")
+        fill("Materials per job (USD)", "10")
+        fill("Vehicle cost per job (USD)", "5")
+        fill("Proposed discount %", "20")
+        button("Create draft neighborhood offer").assertIsNotEnabled()
+        compose.onNodeWithText("Below your margin target").assertExists()
+        fill("Proposed discount %", "10")
+        compose.onNodeWithText("3. Compare your offer").performScrollTo()
+        screenshot("08_profit_comparison")
+        shell("settings put system font_scale 1.5")
+        scenario!!.recreate()
+        compose.waitForIdle()
+        compose.onNodeWithText("Minimum price for 30% margin").performScrollTo().assertIsDisplayed()
+        screenshot("09_profit_large_text")
+        tap("Create draft neighborhood offer")
+        val store = LocalStore(context)
+        val saved = store.loadWorkspace()
+        val campaign = saved.campaigns.single()
+        assertEquals(listOf(nearby.id), campaign.recipients.map { it.customerId })
+        assertEquals(1, campaign.capacity)
+        assertEquals(75, campaign.profitPlan!!.blockMinutes)
+        assertEquals(60.0, campaign.profitPlan!!.crewHourlyCost, 0.001)
+        val backup = store.exportJson()
+        BackupValidator.check(backup)
+        store.importJson(backup)
+        assertEquals(campaign, store.loadWorkspace().campaigns.single())
+        screenshot("10_profit_draft_saved")
+        tap("Review message")
+        tap("Approve")
+        tap("I sent this message")
+        tap("Record sent")
+        tap("Customer interested")
+        tap("Confirm appointment")
+        tap("Save appointment")
+        val booked = store.loadWorkspace().appointments.single { it.customerId == nearby.id }
+        assertEquals("10:00", booked.time)
+        assertEquals(75, booked.durationMinutes)
+        assertEquals(135.0, booked.price, 0.001)
+    }
+
     @Test fun newCustomerUsesActualServiceAndPermissionDates() {
         launch(base().copy(customers = emptyList()))
         navigate("customers")

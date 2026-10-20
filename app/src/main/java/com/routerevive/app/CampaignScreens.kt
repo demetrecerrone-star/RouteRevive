@@ -192,6 +192,15 @@ fun CampaignDetailScreen(
                     style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text("${dollars(CampaignFinance.received(state, campaign))} collected",
                     style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                campaign.profitPlan?.let { plan ->
+                    HorizontalDivider()
+                    val estimate = ProfitPlanner.estimate(plan, campaign.price, campaign.discountPct)
+                    Text("Planned opening ${plan.windowStart}–${plan.windowEnd}", fontWeight = FontWeight.SemiBold)
+                    Text("${plan.blockMinutes} minutes per slot, including ${plan.travelMinutes} travel/setup. Minimum agreed price ${dollars(estimate.minimumPrice)} for the ${plan.targetMarginPct}% target.",
+                        style = MaterialTheme.typography.bodyMedium)
+                    Text("At the planned offer price: ${dollars(estimate.contributionPerJob)} estimated contribution per job before overhead/tax. This is a planning estimate; collections above are actual receipts.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 if (CampaignFinance.legacyUnlinked(state, campaign) > 0) Text(
                     "Includes earlier campaign payment records. Review their receipts in Jobs before recording more money.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
@@ -208,7 +217,9 @@ fun CampaignDetailScreen(
             val customer = state.customers.firstOrNull { it.id == recipient.customerId }
             var showMessage by rememberSaveable(campaign.id, recipient.customerId) { mutableStateOf(false) }
             val reasons = if (customer == null) listOf("Customer record is missing.") else
-                index.reasons(customer, campaign.zip, campaign.service) + if (expired) listOf("This offer has expired.") else emptyList()
+                index.reasons(customer, campaign.zip, campaign.service) +
+                    ProfitPlanner.locationErrors(state, campaign, customer) +
+                    if (expired) listOf("This offer has expired.") else emptyList()
             RouteCard {
                 Text(customer?.name ?: "Customer unavailable", style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold)

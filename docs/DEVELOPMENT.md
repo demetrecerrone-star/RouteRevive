@@ -2,7 +2,7 @@
 
 ## Current foundation
 
-Kotlin + Jetpack Compose, Android API 26–36, JDK 17 and Gradle 8.11.1. This is an owner-operated repeat-service and job organizer, with encrypted local records and optional private cloud snapshots. The 0.2.6 upgrade retains the existing version-7 record/backup format and signing identity.
+Kotlin + Jetpack Compose, Android API 26–36, JDK 17 and Gradle 8.11.1. This is an owner-operated repeat-service and job organizer, with encrypted local records and optional private cloud snapshots. The 0.2.7 upgrade retains the version-7 encrypted record/backup format and signing identity, adding optional per-campaign planning fields.
 
 ## Code map
 
@@ -16,6 +16,7 @@ Paths are relative to `app/src/main/java/com/routerevive/app/`.
 | Persist-first snapshots and linked booking/job operations | `Workspace.kt` |
 | Indexed eligibility, offer lifecycle and campaign finances | `CampaignWorkflow.kt` |
 | Campaign list, builder and customer approval queue | `CampaignScreens.kt` |
+| Cost comparisons, calendar openings and margin-protected nearby drafts | `ProfitPlanner.kt`, `ProfitPlannerScreen.kt` |
 | Overview, customers and grouped tools | `Dashboard.kt`, `CustomersScreen.kt`, `MoreScreen.kt` |
 | Schedule and customer editor | `ExtraScreens.kt` |
 | Jobs, photos and invoice exports | `JobsScreen.kt`, `JobData.kt`, `JobFiles.kt` |
@@ -38,6 +39,8 @@ Job receipts are the dated financial source. Campaign payment entry appends to t
 
 Eligibility uses the existing 180-day service interval and 60-day contact cooldown. An indexed context shares the same rules across Overview, the builder, and send-time checks. Approval is invalidated when relevant customer/eligibility fields change. Sending remains a manual external SMS action; recording a sent message does not send anything.
 
+Profit-planned campaigns are created through `ProfitPlanner.create`, which rechecks the free opening, mapped radius, eligible audience and contribution target in the same persist-first operation. The ordinary campaign builder cannot create planned offers. `CampaignWorkflow.book` and `WorkspaceRules.reschedule` retain the planned service date, opening, minimum price and full service/travel block. No calendar time is reserved by a draft; normal booking conflicts are checked at confirmation. Cost assumptions are optional on legacy campaigns, are validated before backup import and are stored with each new planned offer. See [profit planning rules](PROFIT_PLANNER.md).
+
 ## Verification
 
 ```sh
@@ -50,9 +53,11 @@ With a test device/emulator connected:
 ./gradlew connectedDebugAndroidTest
 ```
 
-The Android smoke suite seeds fictional records in its test installation. It covers building/reviewing/booking an offer, completion and one-ledger payment reporting, nested job back navigation, focused search → More, large system text and rotation. Screenshots are written to the test device's `Download/routerevive-smoke` directory so they survive the connected-test app uninstall. `scripts/android-smoke.sh` runs the suite and collects screenshots/logs for CI.
+The Android smoke suite seeds fictional records in its test installation. It covers building/reviewing/booking an offer, completion and one-ledger payment reporting, nested job back navigation, focused search → More, large system text and rotation. The profit-planning case also checks a below-target discount, saved assumptions through encrypted JSON restore, the restricted nearby audience and a booking with the discounted price plus travel time. Screenshots are written to the test device's `Download/routerevive-smoke` directory so they survive the connected-test app uninstall. `scripts/android-smoke.sh` runs the suite and collects screenshots/logs for CI.
 
 Unit regression cases cover failed persistence/retry, cross-record consistency, capacity and scheduling conflicts, non-finite/fractional amounts, partial/full receipts, opt-outs, repeat eligibility, legacy campaign money and request confirmation.
+
+The profit-planning unit cases additionally cover decimal price floors, paid crew travel time, conservative cost rounding, independent calendar openings, previous-day overlap, invalid schedule records, radius-restricted audience, stale openings, margin/time guards at booking and rescheduling, map-pin changes, failed saves and optional backup-field validation.
 
 ## Release path
 

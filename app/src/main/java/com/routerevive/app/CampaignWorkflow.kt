@@ -53,10 +53,12 @@ object CampaignWorkflow {
         if (!WorkspaceRules.validMoney(campaign.price) || campaign.price <= 0) errors += "Enter a positive price with at most two decimal places."
         if (campaign.discountPct !in 0..50) errors += "Choose a discount from 0% to 50%."
         if (campaign.capacity !in 1..99) errors += "Choose 1–99 booking slots."
+        campaign.profitPlan?.let { errors += ProfitPlanner.planErrors(it) }
         return errors
     }
 
     fun create(state: WorkspaceSnapshot, campaign: Campaign, today: LocalDate = LocalDate.now()): WorkspaceSnapshot {
+        require(campaign.profitPlan == null) { "Create a planned offer through Profit planner to verify its opening and nearby audience." }
         require(offerErrors(campaign, today).isEmpty()) { offerErrors(campaign, today).joinToString(" ") }
         require(state.campaigns.none { it.id == campaign.id }) { "This offer was already saved." }
         val index = EligibilityIndex(state, today)
@@ -72,6 +74,7 @@ object CampaignWorkflow {
     fun contactReasons(state: WorkspaceSnapshot, campaign: Campaign, customer: Customer,
                        today: LocalDate = LocalDate.now()): List<String> {
         val errors = EligibilityIndex(state, today, campaign.id).reasons(customer, campaign.zip, campaign.service).toMutableList()
+        errors += ProfitPlanner.locationErrors(state, campaign, customer)
         if (runCatching { LocalDate.parse(campaign.expiryDate).isBefore(today) }.getOrDefault(true))
             errors += "The offer has expired."
         if (runCatching { LocalDate.parse(campaign.visitDate).isBefore(today) }.getOrDefault(true))
@@ -147,6 +150,8 @@ object CampaignWorkflow {
         }
         require(linkedAppointment(state, campaignId, customerId) == null) { "This customer already has an appointment for this offer." }
         require(amount > 0 && WorkspaceRules.validMoney(amount)) { "Enter a positive agreed price with at most two decimal places." }
+        val planningErrors = ProfitPlanner.bookingErrors(campaign, amount, time, duration)
+        require(planningErrors.isEmpty()) { planningErrors.joinToString(" ") }
         val proposed = Appointment(customerId = customerId, service = campaign.service, date = campaign.visitDate,
             time = time, durationMinutes = duration, price = amount, campaignId = campaignId)
         val next = WorkspaceRules.addAppointments(state, listOf(proposed), now)

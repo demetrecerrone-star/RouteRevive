@@ -2,6 +2,14 @@
 
 Earlier release notes, retained for upgrade and compatibility reference.
 
+## 0.2.7 (development) — Margin-protected neighborhood offers
+
+Profit planner connects an existing mapped booking to a free opening and eligible nearby repeat customers. It compares full price with a proposed discount using entered crew, material, vehicle and travel/setup costs. Planned offers retain a minimum agreed price, a service date and an opening; bookings and rescheduling keep the full service/travel block.
+
+Planning assumptions are saved inside the encrypted campaign record and version-7 backups. Estimates remain separate from actual receipts. This version uses code 18 with the existing app ID and signing configuration. See [profit planning](PROFIT_PLANNER.md) for calculations and travel assumptions.
+
+---
+
 # RouteRevive v0.2.4 — Cloud backup management and overview polish
 
 What's new: **More → Private cloud backups** now shows the type and size of listed archives, protects the most recent backup and automatic sync head, and allows explicit confirmed deletion of older cloud files. A **new Supabase DELETE Row Level Security policy** must be added by existing cloud users; see [Supabase setup instructions](docs/SUPABASE_SETUP.md). Cloud objects remain private and access-controlled. Deletion is irreversible and may affect other devices.

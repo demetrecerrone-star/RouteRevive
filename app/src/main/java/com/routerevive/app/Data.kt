@@ -72,7 +72,8 @@ data class Campaign(
     val discountPct: Int,
     val capacity: Int,
     val createdAt: String = LocalDate.now().toString(),
-    val recipients: List<Recipient> = emptyList()
+    val recipients: List<Recipient> = emptyList(),
+    val profitPlan: ProfitPlan? = null
 )
 
 object CampaignRules {
@@ -249,6 +250,7 @@ class LocalStore(context: Context) {
                     expiryDate = j.getString("expiryDate"), price = j.getDouble("price"),
                     discountPct = j.optInt("discountPct"), capacity = j.getInt("capacity"),
                     createdAt = j.optString("createdAt"),
+                    profitPlan = if (j.has("profitPlan")) ProfitPlan.fromJson(j.getJSONObject("profitPlan")) else null,
                     recipients = (0 until list.length()).map { index ->
                         val r = list.getJSONObject(index)
                         Recipient(
@@ -388,6 +390,7 @@ class LocalStore(context: Context) {
                 put("visitDate", c.visitDate); put("expiryDate", c.expiryDate)
                 put("price", c.price); put("discountPct", c.discountPct)
                 put("capacity", c.capacity); put("createdAt", c.createdAt); put("recipients", rs)
+                c.profitPlan?.let { put("profitPlan", it.toJson()) }
             })
         }
         val aps = JSONArray()
