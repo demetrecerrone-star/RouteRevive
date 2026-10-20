@@ -72,7 +72,8 @@ data class Campaign(
     val discountPct: Int,
     val capacity: Int,
     val createdAt: String = LocalDate.now().toString(),
-    val recipients: List<Recipient> = emptyList()
+    val recipients: List<Recipient> = emptyList(),
+    val profitPlan: ProfitPlan? = null
 )
 
 object CampaignRules {
@@ -84,12 +85,12 @@ object CampaignRules {
 
     fun reasons(
         customer: Customer, zip: String, service: String, today: LocalDate,
-        customers: List<Customer>, campaigns: List<Campaign>
+        customers: List<Customer>, campaigns: List<Campaign>, index: EligibilityIndex? = null
     ): List<String> {
         val errors = mutableListOf<String>()
         if (customer.demo) errors += "Example record (not contactable)"
         if (customer.zip != zip || !customer.zip.matches(Regex("\\d{5}"))) errors += "Outside selected ZIP"
-        if (!customer.service.equals(service, ignoreCase = true)) errors += "Different service"
+        if (!customer.service.trim().equals(service.trim(), ignoreCase = true)) errors += "Different service"
         if (digits(customer.phone).length !in 10..15) errors += "Invalid phone"
         if (!customer.consent || customer.consentEvidence.isBlank()) errors += "No documented SMS marketing permission"
         if (customer.optedOut) errors += "Opted out"
@@ -102,11 +103,11 @@ object CampaignRules {
             if (recent == null || ChronoUnit.DAYS.between(recent, today) < CONTACT_COOLDOWN_DAYS)
                 errors += "Contacted in past 60 days"
         }
-        val sameNumber = customers.count {
+        val duplicatePhone = index?.duplicatePhones?.contains(digits(customer.phone)) ?: customers.any {
             it.id != customer.id && digits(it.phone) == digits(customer.phone) && digits(it.phone).isNotBlank()
         }
-        if (sameNumber > 0) errors += "Duplicate phone number"
-        if (campaigns.any { campaign ->
+        if (duplicatePhone) errors += "Duplicate phone number"
+        if (index?.activeCustomerIds?.contains(customer.id) ?: campaigns.any { campaign ->
             runCatching { !LocalDate.parse(campaign.expiryDate).isBefore(today) }.getOrDefault(false) &&
                 campaign.recipients.any { it.customerId == customer.id && it.status in busy }
         }) errors += "Already in active campaign"
@@ -249,6 +250,7 @@ class LocalStore(context: Context) {
                     expiryDate = j.getString("expiryDate"), price = j.getDouble("price"),
                     discountPct = j.optInt("discountPct"), capacity = j.getInt("capacity"),
                     createdAt = j.optString("createdAt"),
+                    profitPlan = if (j.has("profitPlan")) ProfitPlan.fromJson(j.getJSONObject("profitPlan")) else null,
                     recipients = (0 until list.length()).map { index ->
                         val r = list.getJSONObject(index)
                         Recipient(
@@ -388,6 +390,7 @@ class LocalStore(context: Context) {
                 put("visitDate", c.visitDate); put("expiryDate", c.expiryDate)
                 put("price", c.price); put("discountPct", c.discountPct)
                 put("capacity", c.capacity); put("createdAt", c.createdAt); put("recipients", rs)
+                c.profitPlan?.let { put("profitPlan", it.toJson()) }
             })
         }
         val aps = JSONArray()

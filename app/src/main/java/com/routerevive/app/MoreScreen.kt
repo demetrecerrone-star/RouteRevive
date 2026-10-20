@@ -1,13 +1,18 @@
 package com.routerevive.app
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -15,71 +20,94 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun MoreScreen(
-    business: BusinessProfile,
     onMap: () -> Unit, onRequests: () -> Unit,
     onCampaigns: () -> Unit, onBusiness: () -> Unit,
-    onBookingPage: () -> Unit,
-    onBeta: () -> Unit,
-    onCloud: () -> Unit,
-    onInsights: () -> Unit,
-    onAlerts: () -> Unit
+    onBookingPage: () -> Unit, onBeta: () -> Unit,
+    onCloud: () -> Unit, onInsights: () -> Unit, onAlerts: () -> Unit,
+    onProfitPlanner: () -> Unit
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("YOUR BUSINESS TOOLS", color = MaterialTheme.colorScheme.primary,
-            fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        MoreEntry("Business analytics", "Payment trends, overdue invoices and customer activity",
-            onClick = onInsights)
-        MoreEntry("Reminders & alerts", "Private local notifications for upcoming work and payments",
-            onClick = onAlerts)
-        MoreEntry("Private cloud backups", "Business sign-in and password-encrypted cross-device snapshots",
-            onClick = onCloud)
-        MoreEntry("Beta readiness & privacy", "Local data health, release checklist and privacy details",
-            onClick = onBeta)
-        MoreEntry("Neighborhood map", "Customer pins and smart route suggestions",
-            onClick = onMap)
-        MoreEntry("Booking requests", "Review and confirm customer inquiries",
-            onClick = onRequests)
-        MoreEntry("Campaigns", "Repeat-service offers and consent controls",
-            onClick = onCampaigns)
-        MoreEntry("Booking request page", "Share an HTML form for customers to send inquiries",
-            onClick = onBookingPage)
-        MoreEntry("Business & finances", "Your logo, billing, reports and CSV import",
-            onClick = onBusiness)
-        HorizontalDivider()
-        Text("Cloud & local data", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        Text("Supabase cloud backup is optional. Private encrypted snapshots can be uploaded manually or on a schedule. Importing cloud changes requires confirmation. No live multi-user edits, merging, or public booking server yet.",
-            fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
-        Text("Workspace: " + business.workspaceId.take(12),
-            color = MaterialTheme.colorScheme.primary, fontSize = 12.sp)
-        Text("Encrypted records stay on this device. Keep your password-protected full backup safe.",
-            fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+        verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        Text("A place for everything behind the scenes.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        ToolGroup("Customers & growth") {
+            MoreEntry(Icons.AutoMirrored.Filled.TrendingUp, "Profit planner", "Find nearby work that fits your time and margin", onProfitPlanner)
+            ToolDivider()
+            MoreEntry(Icons.Default.Inbox, "Booking requests", "Review inquiries and confirm a time", onRequests)
+            ToolDivider()
+            MoreEntry(Icons.Default.Campaign, "Campaigns", "Plan repeat-service offers", onCampaigns)
+            ToolDivider()
+            MoreEntry(Icons.Default.Map, "Neighborhood map", "Customer locations and route suggestions", onMap)
+            ToolDivider()
+            MoreEntry(Icons.Default.Web, "Booking request page", "Share a form that opens an SMS or email inquiry", onBookingPage)
+        }
+        ToolGroup("Run your business") {
+            MoreEntry(Icons.Default.Storefront, "Business & finances", "Profile, billing, reports and CSV import", onBusiness)
+            ToolDivider()
+            MoreEntry(Icons.Default.BarChart, "Analytics", "Payment trends and customer activity", onInsights)
+            ToolDivider()
+            MoreEntry(Icons.Default.NotificationsNone, "Reminders & alerts", "Private notifications for work and payments", onAlerts)
+        }
+        ToolGroup("Data & support") {
+            MoreEntry(Icons.Default.CloudQueue, "Private cloud backups", "Encrypted snapshots and restore options", onCloud)
+            ToolDivider()
+            MoreEntry(Icons.Default.VerifiedUser, "Readiness & privacy", "Check data health and privacy details", onBeta)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Lock, null, Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Encrypted on this device. Private cloud backups are optional.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text("RouteRevive · v${BuildConfig.VERSION_NAME}",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(8.dp))
     }
 }
 
 @Composable
-private fun MoreEntry(title: String, subtitle: String, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Row(Modifier.fillMaxWidth().padding(15.dp),
-            horizontalArrangement = Arrangement.SpaceBetween) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(title, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                Text(subtitle, color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp)
-            }
-            Text("›", color = MaterialTheme.colorScheme.primary, fontSize = 25.sp)
+private fun ToolGroup(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            Column(Modifier.fillMaxWidth(), content = content)
         }
     }
 }
 
 @Composable
-fun BookingPageScreen(profile: BusinessProfile, onBack: () -> Unit) {
+private fun ToolDivider() {
+    HorizontalDivider(Modifier.padding(horizontal = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+}
+
+@Composable
+private fun MoreEntry(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        FeatureIcon(icon)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall)
+            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall)
+        }
+        Icon(Icons.AutoMirrored.Filled.ArrowForward, null, Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+fun BookingPageScreen(profile: BusinessProfile) {
     val context = LocalContext.current
     var error by remember { mutableStateOf("") }
     val ready = CustomerBookingPage.ready(profile)
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        TextButton(onClick = onBack) { Text("← More tools") }
         Text("Customer booking request page", fontSize = 22.sp,
             fontWeight = FontWeight.Bold)
         Text("Create a branded, mobile-friendly HTML form with your business details. Share the HTML file as an attachment or publish it on a website you control.",

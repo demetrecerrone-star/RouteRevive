@@ -51,6 +51,13 @@
 
 ## Google Play app-content requirements (October 2026 review)
 
+Before releasing the 0.2.7 profit planner, also check on a release-signed test installation:
+
+- [ ] Enter real business costs, verify both full-price and discounted contribution, and check the minimum price against an independent calculation.
+- [ ] Verify map pins and actual driving time; confirm the entered travel/setup allowance covers the added stops and the next booked appointment.
+- [ ] Restore a full photo-inclusive encrypted archive containing a planned offer; verify its audience, cost assumptions, opening and booking restrictions survive.
+- [ ] Add an unrelated booking to the proposed opening and verify the planned offer cannot book overlapping work.
+
 - [ ] Prepare and publish an **accurate privacy policy** at a public, non-PDF, permanent HTTPS URL. Include a link/text inside the app. The draft in this repo needs verified support contact and review.
 - [ ] Complete Google Play's **Data safety** form based on actual SDK and app behavior (map tiles, address geocoding, external SMS/email/maps and user-selected backup locations). Do not mark "no collection" without reviewing network calls and third-party behavior.
 - [ ] Verify target audience, content rating, app access instructions, ads declaration, data deletion and any other applicable forms.

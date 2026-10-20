@@ -1,6 +1,8 @@
 package com.routerevive.app
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -55,25 +57,25 @@ fun CustomerEditor(
     onSave: (Customer) -> Unit,
     onCancel: () -> Unit
 ) {
-    var name by remember(customer.id) { mutableStateOf(customer.name) }
-    var phone by remember(customer.id) { mutableStateOf(customer.phone) }
-    var zip by remember(customer.id) { mutableStateOf(customer.zip) }
-    var service by remember(customer.id) { mutableStateOf(customer.service) }
-    var address by remember(customer.id) { mutableStateOf(customer.address) }
-    var latitude by remember(customer.id) { mutableStateOf(customer.latitude?.toString() ?: "") }
-    var longitude by remember(customer.id) { mutableStateOf(customer.longitude?.toString() ?: "") }
-    var notes by remember(customer.id) { mutableStateOf(customer.notes) }
-    var date by remember(customer.id) { mutableStateOf(customer.lastService) }
-    var price by remember(customer.id) { mutableStateOf(customer.lastPrice.toString()) }
-    var consent by remember(customer.id) { mutableStateOf(customer.consent) }
-    var evidence by remember(customer.id) { mutableStateOf(customer.consentEvidence) }
-    var consentDate by remember(customer.id) { mutableStateOf(customer.consentDate) }
-    var markOptOut by remember(customer.id) { mutableStateOf(customer.optedOut) }
-    var issue by remember(customer.id) { mutableStateOf(customer.issueOpen) }
-    var futureBooked by remember(customer.id) { mutableStateOf(customer.futureBooked) }
+    var name by rememberSaveable(customer.id) { mutableStateOf(customer.name) }
+    var phone by rememberSaveable(customer.id) { mutableStateOf(customer.phone) }
+    var zip by rememberSaveable(customer.id) { mutableStateOf(customer.zip) }
+    var service by rememberSaveable(customer.id) { mutableStateOf(customer.service) }
+    var address by rememberSaveable(customer.id) { mutableStateOf(customer.address) }
+    var latitude by rememberSaveable(customer.id) { mutableStateOf(customer.latitude?.toString() ?: "") }
+    var longitude by rememberSaveable(customer.id) { mutableStateOf(customer.longitude?.toString() ?: "") }
+    var notes by rememberSaveable(customer.id) { mutableStateOf(customer.notes) }
+    var date by rememberSaveable(customer.id) { mutableStateOf(customer.lastService) }
+    var price by rememberSaveable(customer.id) { mutableStateOf(customer.lastPrice.toString()) }
+    var consent by rememberSaveable(customer.id) { mutableStateOf(customer.consent) }
+    var evidence by rememberSaveable(customer.id) { mutableStateOf(customer.consentEvidence) }
+    var consentDate by rememberSaveable(customer.id) { mutableStateOf(customer.consentDate) }
+    var markOptOut by rememberSaveable(customer.id) { mutableStateOf(customer.optedOut) }
+    var issue by rememberSaveable(customer.id) { mutableStateOf(customer.issueOpen) }
+    var futureBooked by rememberSaveable(customer.id) { mutableStateOf(customer.futureBooked) }
     val valid = name.isNotBlank() && zip.matches(Regex("\\d{5}")) &&
         CampaignRules.digits(phone).length in 10..15 && service.isNotBlank() &&
-        ScheduleRules.validDate(date) && (price.toDoubleOrNull() ?: -1.0) >= 0 &&
+        ScheduleRules.validDate(date) && WorkspaceRules.validMoney(price.toDoubleOrNull() ?: -1.0) &&
         (!consent || (evidence.isNotBlank() && ScheduleRules.validDate(consentDate))) &&
         address.length < 500 && notes.length < 4000 &&
         ((latitude.isBlank() && longitude.isBlank()) ||
@@ -90,7 +92,7 @@ fun CustomerEditor(
             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
         ExtraField("Latitude (optional, -90 to 90)", latitude, KeyboardType.Decimal) { latitude = it }
         ExtraField("Longitude (optional, -180 to 180)", longitude, KeyboardType.Decimal) { longitude = it }
-        ExtraField("Last completed service (YYYY-MM-DD)", date) { date = it }
+        DateInput("Last completed service", date, { date = it }, maxDate = LocalDate.now())
         ExtraField("Previous service price ($)", price, KeyboardType.Decimal) { price = it }
         OutlinedTextField(value = notes, onValueChange = { if (it.length <= 4000) notes = it },
             label = { Text("Customer notes") }, minLines = 3, modifier = Modifier.fillMaxWidth())
@@ -102,7 +104,7 @@ fun CustomerEditor(
         }
         if (consent) {
             ExtraField("Consent evidence / source", evidence) { evidence = it }
-            ExtraField("Consent date (YYYY-MM-DD)", consentDate) { consentDate = it }
+            DateInput("Permission date", consentDate, { consentDate = it }, maxDate = LocalDate.now())
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked = markOptOut, onCheckedChange = { if (it) markOptOut = true },
@@ -136,20 +138,23 @@ fun CustomerEditor(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ScheduleScreen(
     customers: List<Customer>,
     appointments: List<Appointment>,
-    onNew: (Appointment) -> Unit,
-    onRepeat: (List<Appointment>) -> Unit,
-    onStatus: (Appointment, String) -> Unit,
-    onReschedule: (Appointment) -> Unit,
+    errorMessage: String,
+    onNew: (Appointment) -> Boolean,
+    onRepeat: (List<Appointment>) -> Boolean,
+    onStatus: (Appointment, String) -> Boolean,
+    onReschedule: (Appointment) -> Boolean,
     onRemind: (Appointment) -> Unit,
     onMarkReminded: (Appointment) -> Unit
 ) {
     var showNew by remember { mutableStateOf(false) }
-    var filter by remember { mutableStateOf("Upcoming") }
-    var focusDate by remember { mutableStateOf(LocalDate.now()) }
+    var filter by rememberSaveable { mutableStateOf("Upcoming") }
+    var focusDate by rememberSaveable(stateSaver = androidx.compose.runtime.saveable.Saver<LocalDate, String>(
+        save = { it.toString() }, restore = { LocalDate.parse(it) })) { mutableStateOf(LocalDate.now()) }
     var repeatSource by remember { mutableStateOf<Appointment?>(null) }
     var repeatCadence by remember { mutableStateOf(RepeatCadence.WEEKLY) }
     var repeatCount by remember { mutableStateOf("4") }
@@ -158,13 +163,13 @@ fun ScheduleScreen(
     var newDate by remember { mutableStateOf("") }
     var newTime by remember { mutableStateOf("") }
     var newDuration by remember { mutableStateOf("") }
-    var customerId by remember { mutableStateOf("") }
-    var service by remember { mutableStateOf("") }
-    var date by remember { mutableStateOf(LocalDate.now().plusDays(1).toString()) }
-    var time by remember { mutableStateOf("09:00") }
-    var duration by remember { mutableStateOf("60") }
-    var price by remember { mutableStateOf("150") }
-    var notes by remember { mutableStateOf("") }
+    var customerId by rememberSaveable { mutableStateOf("") }
+    var service by rememberSaveable { mutableStateOf("") }
+    var date by rememberSaveable { mutableStateOf(LocalDate.now().plusDays(1).toString()) }
+    var time by rememberSaveable { mutableStateOf("09:00") }
+    var duration by rememberSaveable { mutableStateOf("60") }
+    var price by rememberSaveable { mutableStateOf("150") }
+    var notes by rememberSaveable { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
     val selected = customers.firstOrNull { it.id == customerId }
     val candidate = Appointment(customerId = customerId, service = service, date = date, time = time,
@@ -175,7 +180,7 @@ fun ScheduleScreen(
         runCatching { !java.time.LocalDateTime.of(
             LocalDate.parse(date), LocalTime.parse(time)
         ).isBefore(java.time.LocalDateTime.now()) }.getOrDefault(false) &&
-        (duration.toIntOrNull() ?: 0) in 15..480 && (price.toDoubleOrNull() ?: -1.0) >= 0.0 &&
+        (duration.toIntOrNull() ?: 0) in 15..480 && WorkspaceRules.validMoney(price.toDoubleOrNull() ?: -1.0) &&
         !ScheduleRules.overlaps(candidate, appointments)
     val currentDate = LocalDate.now()
     val visible = appointments.filter { a ->
@@ -193,7 +198,7 @@ fun ScheduleScreen(
             Text("Appointments", fontSize = 19.sp, fontWeight = FontWeight.Bold)
             Button(onClick = { showNew = true }) { Icon(Icons.Default.Add, null); Text(" New") }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             listOf("Day", "Week", "Upcoming", "All").forEach { option ->
                 FilterChip(selected = filter == option,
                     onClick = {
@@ -241,9 +246,9 @@ fun ScheduleScreen(
         Text("${visible.size} shown · ${appointments.size} total",
             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
         if (visible.isEmpty()) {
-            Text(if (appointments.isEmpty()) "No appointments. Add your first job."
-                else "No appointments in this view. Choose All for history.",
-                color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(vertical = 15.dp))
+            RouteCard { RouteEmptyState(Icons.Default.CalendarMonth,
+                if (appointments.isEmpty()) "Make room for your next booking" else "No appointments in this view",
+                "Add a confirmed appointment or choose another calendar view.") }
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(vertical = 12.dp)) {
@@ -257,7 +262,8 @@ fun ScheduleScreen(
                         Text("${a.date}  ·  ${a.time}", fontWeight = FontWeight.Bold)
                         Text(c?.name ?: "Customer unavailable", color = MaterialTheme.colorScheme.primary)
                         Text(a.service, fontSize = 13.sp)
-                        Text("${a.durationMinutes} minutes · $${"%.2f".format(a.price)} · ${a.status}",
+                        StatusPill(a.status.lowercase().replace('_', ' ').replaceFirstChar { it.uppercase() }, a.status == "CANCELLED")
+                        Text("${a.durationMinutes} minutes · $${java.lang.String.format(java.util.Locale.US, "%,.2f", a.price)}",
                             fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
                         if (a.notes.isNotBlank()) Text(a.notes, fontSize = 12.sp)
                         val reminderCustomer = customers.firstOrNull { it.id == a.customerId }
@@ -288,11 +294,12 @@ fun ScheduleScreen(
                             }) { Text("Repeat booking") }
                         }
                         if (a.status in setOf("SCHEDULED", "IN_PROGRESS")) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 if (a.status == "SCHEDULED") {
                                     TextButton(onClick = { onStatus(a, "IN_PROGRESS") }) { Text("Start") }
                                 }
-                                TextButton(onClick = { statusChange = a to "COMPLETED" }) { Text("Complete") }
+                                TextButton(enabled = runCatching { !LocalDate.parse(a.date).isAfter(LocalDate.now()) }.getOrDefault(false),
+                                    onClick = { statusChange = a to "COMPLETED" }) { Text("Complete") }
                                 TextButton(onClick = { statusChange = a to "CANCELLED" }) { Text("Cancel") }
                             }
                             if (a.status == "SCHEDULED") {
@@ -343,8 +350,7 @@ fun ScheduleScreen(
                 }
             }, confirmButton = {
                 TextButton(enabled = proposed.isSuccess, onClick = {
-                    proposed.getOrNull()?.let(onRepeat)
-                    repeatSource = null
+                    if (proposed.getOrNull()?.let(onRepeat) == true) repeatSource = null
                 }) { Text("Create bookings") }
             }, dismissButton = {
                 TextButton(onClick = { repeatSource = null }) { Text("Cancel") }
@@ -361,7 +367,7 @@ fun ScheduleScreen(
                     " · " + appointment.date + " at " + appointment.time)
             },
             confirmButton = { TextButton(onClick = {
-                onStatus(appointment, status); statusChange = null
+                if (onStatus(appointment, status)) statusChange = null
             }) { Text("Confirm") } },
             dismissButton = { TextButton(onClick = { statusChange = null }) { Text("Keep booking") } })
     }
@@ -390,8 +396,7 @@ fun ScheduleScreen(
                 }
             },
             confirmButton = { TextButton(enabled = validMove, onClick = {
-                onReschedule(revised)
-                rescheduling = null
+                if (onReschedule(revised)) rescheduling = null
             }) { Text("Save booking") } },
             dismissButton = { TextButton(onClick = { rescheduling = null }) { Text("Cancel") } })
     }
@@ -410,8 +415,8 @@ fun ScheduleScreen(
                         }
                     }
                     ExtraField("Service", service) { service = it }
-                    ExtraField("Date YYYY-MM-DD", date) { date = it }
-                    ExtraField("Time HH:mm (24-hour)", time) { time = it }
+                    DateInput("Appointment date", date, { date = it }, minDate = LocalDate.now())
+                    TimeInput("Start time", time, { time = it })
                     ExtraField("Duration (minutes)", duration, KeyboardType.Number) { duration = it }
                     ExtraField("Price ($)", price, KeyboardType.Decimal) { price = it }
                     ExtraField("Notes", notes) { notes = it }
@@ -421,12 +426,13 @@ fun ScheduleScreen(
                             color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                     }
                     if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+                    if (errorMessage.isNotBlank()) Text(errorMessage, color = MaterialTheme.colorScheme.error)
                 }
             },
             confirmButton = {
                 TextButton(enabled = valid, onClick = {
                     if (!ScheduleRules.overlaps(candidate, appointments)) {
-                        onNew(candidate); showNew = false; error = ""
+                        if (onNew(candidate)) { showNew = false; error = "" }
                     } else error = "Slot already taken"
                 }) { Text("Schedule") }
             },

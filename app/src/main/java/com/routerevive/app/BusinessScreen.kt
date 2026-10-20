@@ -6,6 +6,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,21 +28,21 @@ import java.util.Locale
 fun BusinessScreen(profile: BusinessProfile, customers: List<Customer>,
                    jobs: List<JobRecord>, appointments: List<Appointment>,
                    campaigns: List<Campaign>, appLock: Boolean,
-                   onSave: (BusinessProfile) -> Unit,
-                   onAddCustomers: (List<Customer>) -> Unit,
+                   onSave: (BusinessProfile) -> Boolean,
+                   onAddCustomers: (List<Customer>) -> Boolean,
                    onAppLock: (Boolean) -> Unit) {
     val context = LocalContext.current
     val secure = remember {
         (context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager).isDeviceSecure
     }
-    var section by remember { mutableStateOf("Profile") }
-    var name by remember(profile) { mutableStateOf(profile.name) }
-    var phone by remember(profile) { mutableStateOf(profile.phone) }
-    var email by remember(profile) { mutableStateOf(profile.email) }
-    var address by remember(profile) { mutableStateOf(profile.address) }
-    var website by remember(profile) { mutableStateOf(profile.website) }
-    var terms by remember(profile) { mutableStateOf(profile.paymentTerms) }
-    var logo by remember(profile) { mutableStateOf(profile.logoFile) }
+    var section by rememberSaveable { mutableStateOf("Profile") }
+    var name by rememberSaveable(profile) { mutableStateOf(profile.name) }
+    var phone by rememberSaveable(profile) { mutableStateOf(profile.phone) }
+    var email by rememberSaveable(profile) { mutableStateOf(profile.email) }
+    var address by rememberSaveable(profile) { mutableStateOf(profile.address) }
+    var website by rememberSaveable(profile) { mutableStateOf(profile.website) }
+    var terms by rememberSaveable(profile) { mutableStateOf(profile.paymentTerms) }
+    var logo by rememberSaveable(profile) { mutableStateOf(profile.logoFile) }
     var message by remember { mutableStateOf("") }
     var proposedImport by remember { mutableStateOf<CsvImportResult?>(null) }
     val chooseLogo = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
@@ -70,7 +72,7 @@ fun BusinessScreen(profile: BusinessProfile, customers: List<Customer>,
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("BUSINESS ESSENTIALS", color = MaterialTheme.colorScheme.primary,
             fontWeight = FontWeight.Bold, fontSize = 12.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("Profile", "Finances", "Import").forEach { item ->
                 FilterChip(selected = section == item, onClick = { section = item },
                     label = { Text(item, fontSize = 12.sp) })
@@ -110,9 +112,9 @@ fun BusinessScreen(profile: BusinessProfile, customers: List<Customer>,
                     website.length <= 180 && terms.length <= 400
                 Button(enabled = valid, modifier = Modifier.fillMaxWidth(),
                     onClick = {
-                        onSave(BusinessProfile(name.trim(), phone.trim(), email.trim(),
-                            address.trim(), website.trim(), terms.trim(), logo, profile.workspaceId))
-                        message = "Business profile saved."
+                        message = if (onSave(BusinessProfile(name.trim(), phone.trim(), email.trim(),
+                            address.trim(), website.trim(), terms.trim(), logo, profile.workspaceId)))
+                            "Business profile saved." else "Profile was not saved. Please try again."
                     }) { Text("Save business profile") }
                 HorizontalDivider()
                 Text("App launch lock", fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -166,7 +168,10 @@ fun BusinessScreen(profile: BusinessProfile, customers: List<Customer>,
                             fontSize = 12.sp)
                     }
                     Button(enabled = preview.customers.isNotEmpty(), onClick = {
-                        onAddCustomers(preview.customers)
+                        if (!onAddCustomers(preview.customers)) {
+                            message = "Import was not saved. Please try again."
+                            return@Button
+                        }
                         message = "Imported " + preview.customers.size +
                             " customers with SMS permission disabled."
                         proposedImport = null

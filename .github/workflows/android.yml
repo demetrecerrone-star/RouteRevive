@@ -1,4 +1,4 @@
-name: Android signed APK
+name: Android checks and signed release
 on:
   push:
     branches: [main]
@@ -6,11 +6,16 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  test-and-build:
+  verify:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -21,11 +26,82 @@ jobs:
         with:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.11.1'
 
-      - name: Run Android unit tests
-        run: gradle --no-daemon testDebugUnitTest lintRelease
+      - name: Test, lint and build preview
+        run: ./gradlew --no-daemon testDebugUnitTest lintRelease assembleDebug
+
+      - name: Upload test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RouteRevive-check-reports
+          path: |
+            app/build/reports/
+            app/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload debug preview
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: RouteRevive-preview-${{ github.run_number }}
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  emulator-smoke:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Exercise business workflows on Android 16
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash scripts/android-smoke.sh
+      - name: Upload emulator reports and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: RouteRevive-emulator-evidence
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+            emulator-evidence/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  signed-release:
+    needs: [verify, emulator-smoke]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v4
 
       - name: Require persistent signing secrets
         env:
@@ -39,11 +115,11 @@ jobs:
           echo "$RR_KEYSTORE_BASE64" | base64 --decode > app/routerevive-release.p12
           chmod 600 app/routerevive-release.p12
 
-      - name: Build consistently signed release APK
+      - name: Build consistently signed release APK and AAB
         env:
           RR_SIGNING_FILE: ${{ github.workspace }}/app/routerevive-release.p12
           RR_STORE_PASSWORD: ${{ secrets.RR_STORE_PASSWORD }}
-        run: gradle --no-daemon assembleRelease bundleRelease
+        run: ./gradlew --no-daemon assembleRelease bundleRelease
 
       - name: Remove signing key from runner workspace
         if: always()
@@ -51,17 +127,17 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: RouteRevive-v0.2.4-signed
+          name: RouteRevive-signed
           path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
-          name: RouteRevive-v0.2.4-app-bundle
+          name: RouteRevive-app-bundle
           path: app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
 
   publish-direct-apk:
-    needs: test-and-build
+    needs: signed-release
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -70,7 +146,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: RouteRevive-v0.2.4-signed
+          name: RouteRevive-signed
           path: release
 
       - name: Prepare stable direct APK link

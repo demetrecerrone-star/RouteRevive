@@ -128,6 +128,14 @@ object BackupValidator {
         records("job", arrayOf("id", "appointmentId", "customerId"), jobs)
         records("request", arrayOf("id", "name", "phone", "zip", "service",
             "requestedDate", "requestedTime"), requests)
+        for (i in 0 until campaigns.length()) {
+            val campaign = campaigns.getJSONObject(i)
+            if (campaign.has("profitPlan")) {
+                val plan = ProfitPlan.fromJson(campaign.getJSONObject("profitPlan"))
+                ProfitPlanner.estimate(plan, campaign.getDouble("price"), campaign.optInt("discountPct", 0))
+                require(campaign.getInt("capacity") in 1..99) { "Invalid planned offer capacity." }
+            }
+        }
         for (i in 0 until jobs.length()) {
             val job = jobs.getJSONObject(i)
             require(JobProgress.valid(job.optString("status", "PLANNED"))) {

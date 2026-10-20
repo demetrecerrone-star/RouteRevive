@@ -82,6 +82,7 @@ object JobMath {
     fun defaultFrom(appointment: Appointment) = JobRecord(
         appointmentId = appointment.id, customerId = appointment.customerId,
         serviceDetails = appointment.notes,
+        status = when (appointment.status) { "COMPLETED" -> "COMPLETED"; "IN_PROGRESS" -> "IN_PROGRESS"; else -> "PLANNED" },
         lineItems = listOf(JobLineItem(appointment.service, 1.0, appointment.price)),
         invoiceNumber = "RR-" + appointment.id.replace("-", "").take(8).uppercase()
     )
